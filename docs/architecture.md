@@ -101,11 +101,12 @@ backend/app/
 ├── auth/                  # JWT para el panel web, dependencias de autenticación
 ├── api/routes/            # endpoints REST (consumidos por el panel web y para pruebas)
 ├── integrations/
-│   ├── whatsapp/          # cliente REAL de WhatsApp Cloud API (Meta)
+│   ├── whatsapp/          # cliente REAL de WhatsApp Cloud API (Meta), incl. descarga de media
+│   ├── transcription/      # transcripción de audio REAL (OpenAI Whisper) — Fase 2
 │   ├── gps/                # interfaz abstracta (placeholder, sin proveedor aún)
 │   ├── calendar/           # interfaz abstracta (placeholder Google Calendar)
 │   └── email/              # interfaz abstracta (placeholder Gmail/Outlook)
-├── ai/                    # cliente LLM desacoplado + loop del agente
+├── ai/                    # cliente LLM desacoplado + loop del agente + extracción de comprobantes (visión)
 └── tools/                 # catálogo de herramientas + implementaciones (llaman a services)
 ```
 
@@ -113,14 +114,17 @@ backend/app/
 
 | Componente | Estado |
 |---|---|
-| Webhook de WhatsApp (verificación + recepción + envío de texto) | **Real**, contra Meta Cloud API. Requiere credenciales propias en `.env` para funcionar end-to-end. |
+| Webhook de WhatsApp (verificación + recepción + envío de texto, descarga de media) | **Real**, contra Meta Cloud API. Requiere credenciales propias en `.env` para funcionar end-to-end. |
 | Agente IA con tool calling | **Real**, usa el SDK oficial de Anthropic. Requiere `ANTHROPIC_API_KEY`. |
 | Base de datos PostgreSQL + migraciones | **Real** (Alembic). |
 | Gastos, tareas, usuarios, permisos, auditoría | **Real**, con tests. |
-| Transcripción de audio, OCR de boletas | **No implementado aún** (Fase 2). El webhook de WhatsApp ignora mensajes de audio/imagen en Fase 1 y responde indicando que aún no se procesan. |
+| Transcripción de audio (mensajes de voz) | **Real** (Fase 2), usa la API de Whisper de OpenAI. Requiere `OPENAI_API_KEY`; si falta, el bot responde indicándolo en vez de fallar en silencio o simular una transcripción. |
+| Extracción de datos de comprobantes/boletas (OCR) | **Real** (Fase 2), usa la capacidad de visión de Claude (no un servicio de OCR aparte). Nunca inventa campos que no aparecen en la imagen; los deja en `null`. |
+| Servicios técnicos (`service_orders`), clientes, máquinas | **Real** (Fase 2): modelos, servicios, tools de IA (`crear_servicio`, `actualizar_servicio`, `buscar_servicios`, `buscar_cliente`, `buscar_maquina`) y endpoints de lectura + páginas del panel web. |
 | GPS, Google Calendar, Email | **Solo interfaces abstractas** (`integrations/gps`, `integrations/calendar`, `integrations/email`). No hay implementación concreta porque no se conoce el proveedor de GPS ni se definieron credenciales de Calendar/Email. Ningún código simula una respuesta real. |
-| Grúas, máquinas, mantenimiento, clientes (módulos completos) | Modelos de datos ya definidos en el esquema (para no romper relaciones futuras), pero sin API ni tools en Fase 1. |
-| Panel web | **Real**, mínimo: login, listado de usuarios, gastos y tareas, consumiendo la API REST real. |
+| Grúas, mantenimiento preventivo | Aún no implementado (Fase 3/4) — no hay tablas ni tools todavía. |
+| Almacenamiento permanente de archivos (fotos de comprobantes, audios) | **No implementado**: los archivos de WhatsApp se procesan al vuelo (transcripción/extracción) y se descartan; solo el resultado (texto/JSON) queda en `media_logs` para auditoría. No hay proveedor de almacenamiento (S3/GCS) configurado — ver riesgo en la sección 8. |
+| Panel web | **Real**: login, usuarios, gastos, tareas, servicios técnicos, clientes y máquinas, consumiendo la API REST real. |
 
 ## 8. Riesgos técnicos identificados
 
@@ -141,17 +145,30 @@ backend/app/
    validarla con el `APP_SECRET`, o el endpoint queda abierto a payloads falsificados.
 5. **PII y datos financieros**: los mensajes de WhatsApp y las transcripciones pueden contener
    información sensible. Se guardan en la base de datos de la empresa (no se reenvían a
-   terceros salvo el proveedor del LLM, que solo recibe el texto necesario para interpretar
-   la intención, nunca credenciales ni datos de otros sistemas).
+   terceros salvo los proveedores de IA (Anthropic, OpenAI para transcripción), que solo
+   reciben el contenido estrictamente necesario para interpretar el mensaje o leer la imagen,
+   nunca credenciales ni datos de otros sistemas).
+6. **Sin almacenamiento permanente de archivos**: las fotos de comprobantes y los audios de
+   WhatsApp se procesan al vuelo y no se guardan (ver tabla de la sección 7). Esto es
+   aceptable para el MVP de Fase 2 (lo que importa para el negocio — el gasto, sus datos — sí
+   queda registrado), pero significa que si la extracción automática se equivoca, no hay
+   forma de volver a mirar la imagen original. Antes de depender de esto en producción con
+   volumen real, conviene agregar un `FileStorageProvider` (S3/GCS) — la interfaz de
+   `media_logs` ya está pensada para poder agregarle una URL de almacenamiento después.
+7. **Costo de la extracción de comprobantes**: cada foto de boleta implica una llamada a
+   Claude con imagen (más cara que una llamada de solo texto). Aceptable en el volumen de un
+   equipo técnico pequeño; monitorear costos si el volumen de fotos crece mucho.
 
 ## 9. Plan de fases (resumen)
 
 - **Fase 0** (este documento): arquitectura, modelo de datos, contratos de API, estructura.
-- **Fase 1 (MVP, implementada en este commit)**: WhatsApp (texto), agente con tool calling,
-  usuarios/roles/permisos, gastos, tareas, panel web mínimo.
-- **Fase 2**: audio + transcripción, OCR de comprobantes, servicios técnicos, clientes, máquinas.
+- **Fase 1 (MVP)**: WhatsApp (texto), agente con tool calling, usuarios/roles/permisos,
+  gastos, tareas, panel web mínimo.
+- **Fase 2 (implementada en este commit)**: audio + transcripción (OpenAI Whisper), OCR de
+  comprobantes (visión de Claude), servicios técnicos (`service_orders`), clientes, máquinas.
 - **Fase 3**: mantenimiento preventivo + alertas, reportes avanzados, dashboard, Excel/PDF,
   Google Calendar.
-- **Fase 4**: correo electrónico, GPS, camionetas, grúas.
+- **Fase 4**: correo electrónico, GPS, camionetas, grúas, almacenamiento permanente de
+  archivos (S3/GCS).
 - **Fase 5**: inteligencia empresarial (consultas analíticas agregadas, comparativas
   mensuales, resúmenes ejecutivos) — siempre basada en datos reales y trazable a registros.

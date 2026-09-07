@@ -41,6 +41,17 @@ class Permission(str, Enum):
     REPORTS_VIEW_OWN = "reports:view_own"
     REPORTS_VIEW_ALL = "reports:view_all"
 
+    SERVICES_CREATE_OWN = "services:create_own"
+    SERVICES_READ_OWN = "services:read_own"
+    SERVICES_READ_ALL = "services:read_all"
+    SERVICES_UPDATE_OWN = "services:update_own"
+    SERVICES_UPDATE_ALL = "services:update_all"
+    SERVICES_ASSIGN = "services:assign"
+    SERVICES_CLOSE = "services:close"
+
+    CUSTOMERS_READ = "customers:read"
+    MACHINES_READ = "machines:read"
+
 
 _BASE_FIELD_PERMISSIONS: set[Permission] = {
     Permission.EXPENSES_CREATE_OWN,
@@ -50,6 +61,11 @@ _BASE_FIELD_PERMISSIONS: set[Permission] = {
     Permission.TASKS_READ_OWN,
     Permission.TASKS_COMPLETE_OWN,
     Permission.REPORTS_VIEW_OWN,
+    Permission.SERVICES_CREATE_OWN,
+    Permission.SERVICES_READ_OWN,
+    Permission.SERVICES_UPDATE_OWN,
+    Permission.CUSTOMERS_READ,
+    Permission.MACHINES_READ,
 }
 
 _BACK_OFFICE_PERMISSIONS: set[Permission] = _BASE_FIELD_PERMISSIONS | {
@@ -61,6 +77,8 @@ _BACK_OFFICE_PERMISSIONS: set[Permission] = _BASE_FIELD_PERMISSIONS | {
     Permission.TASKS_COMPLETE_ALL,
     Permission.USERS_READ_ALL,
     Permission.REPORTS_VIEW_ALL,
+    Permission.SERVICES_READ_ALL,
+    Permission.SERVICES_UPDATE_ALL,
 }
 
 _ALL_PERMISSIONS: set[Permission] = set(Permission)
@@ -76,10 +94,11 @@ ROLE_PERMISSIONS: dict[UserRole, set[Permission]] = {
         Permission.REPORTS_VIEW_OWN,
     },
     UserRole.ADMINISTRACION: set(_BACK_OFFICE_PERMISSIONS),
-    UserRole.JEFE_SERVICIOS_TECNICOS: set(_BACK_OFFICE_PERMISSIONS) - {
-        Permission.EXPENSES_APPROVE_REIMBURSEMENT,
-        Permission.USERS_READ_ALL,
-    },
+    UserRole.JEFE_SERVICIOS_TECNICOS: (
+        set(_BACK_OFFICE_PERMISSIONS)
+        - {Permission.EXPENSES_APPROVE_REIMBURSEMENT, Permission.USERS_READ_ALL}
+        | {Permission.SERVICES_ASSIGN, Permission.SERVICES_CLOSE}
+    ),
     UserRole.GERENTE_SUCURSAL: set(_BACK_OFFICE_PERMISSIONS),
     UserRole.GERENTE_GENERAL: set(_ALL_PERMISSIONS) - {Permission.USERS_MANAGE},
     UserRole.ADMIN_SISTEMA: set(_ALL_PERMISSIONS),

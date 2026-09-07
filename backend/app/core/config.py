@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     max_tool_iterations: int = Field(default=6)
     conversation_history_length: int = Field(default=20)
 
+    # Transcripción de audio (OpenAI Whisper) — Fase 2
+    openai_api_key: str | None = Field(default=None)
+    openai_transcription_model: str = Field(default="whisper-1")
+
+    # Tamaño máximo de un archivo multimedia de WhatsApp que se procesa (bytes)
+    max_media_download_bytes: int = Field(default=20 * 1024 * 1024)
+
     # Rate limiting
     rate_limit_webhook: str = Field(default="30/minute")
     rate_limit_login: str = Field(default="10/minute")

@@ -15,23 +15,29 @@ Selenium, Puppeteer ni ninguna automatización no oficial (riesgo de bloqueo de 
    - `WHATSAPP_APP_SECRET` (para validar firma del webhook)
    - `WHATSAPP_VERIFY_TOKEN` (string propio, se define al configurar el webhook)
 
-## Flujo de mensajes entrantes (Fase 1: solo texto)
+## Flujo de mensajes entrantes
 
 ```
 Meta → POST /api/whatsapp/webhook
         │
         ├─ 1. Validar firma X-Hub-Signature-256 (HMAC con WHATSAPP_APP_SECRET)
-        ├─ 2. Extraer número de teléfono del remitente + texto del mensaje
+        ├─ 2. Extraer número de teléfono del remitente + el mensaje
         ├─ 3. Buscar usuario por telefono_whatsapp
         │      no encontrado → responder "tu número no está registrado" y terminar
-        ├─ 4. ¿Hay una PendingAction pendiente para este usuario?
-        │      sí → interpretar el mensaje como confirmación/cancelación
+        ├─ 4. Según el tipo de mensaje, obtener el texto a interpretar:
+        │      • texto        → se usa tal cual
+        │      • audio        → se descarga y se transcribe (Whisper) — Fase 2
+        │      • imagen        → se descarga y se extraen datos de comprobante (visión de
+        │                        Claude), y se arma un mensaje con esos datos + el caption — Fase 2
+        │      • otro tipo     → responder que ese tipo aún no se soporta y terminar
+        ├─ 5. ¿Hay una PendingAction pendiente para este usuario?
+        │      sí → interpretar el texto resultante como confirmación/cancelación
         │      no → continuar flujo normal
-        ├─ 5. Guardar mensaje en conversation_messages (rol=user)
-        ├─ 6. AgentSession.handle_message(usuario, texto)
+        ├─ 6. Guardar mensaje en conversation_messages (rol=user)
+        ├─ 7. AgentSession.handle_message(usuario, texto)
         │        → agente LLM con tool calling, acotado a los permisos del usuario
-        ├─ 7. Guardar respuesta en conversation_messages (rol=assistant)
-        └─ 8. Enviar respuesta por WhatsApp (Cloud API, mensaje de texto)
+        ├─ 8. Guardar respuesta en conversation_messages (rol=assistant)
+        └─ 9. Enviar respuesta por WhatsApp (Cloud API, mensaje de texto)
 ```
 
 ### Verificación del webhook (`GET /api/whatsapp/webhook`)
@@ -40,15 +46,45 @@ Meta llama a este endpoint al configurar el webhook, con `hub.mode`, `hub.verify
 `hub.challenge`. Se responde con `hub.challenge` solo si `hub.verify_token` coincide con
 `WHATSAPP_VERIFY_TOKEN`.
 
-### Mensajes no soportados aún (Fase 1)
+### Audios (Fase 2)
 
-Si llega un mensaje de audio, imagen o documento, el webhook responde de forma clara:
+`app/services/media_service.py::process_audio_message` descarga el audio
+(`WhatsAppClient.download_media`) y lo transcribe con la API de Whisper de OpenAI
+(`app/integrations/transcription/provider.py`) — integración real, requiere
+`OPENAI_API_KEY`. El texto transcrito se guarda en `media_logs.transcript` (auditoría, sección
+8 del brief) y se procesa exactamente igual que si el usuario lo hubiera escrito.
 
-> "Por ahora solo puedo procesar mensajes de texto. Pronto voy a poder escuchar audios y leer
-> comprobantes 🙂"
+Si `OPENAI_API_KEY` no está configurada, el bot responde:
 
-Esto es intencional: el brief pide explícitamente no simular una integración que no existe
-(OCR/transcripción llegan en Fase 2, ver `architecture.md` §9).
+> "Por ahora no puedo transcribir audios (falta configurar el servicio de transcripción).
+> ¿Puedes escribirlo como texto mientras tanto?"
+
+en vez de fallar en silencio o inventar una transcripción.
+
+### Fotos de comprobantes (Fase 2)
+
+`app/services/media_service.py::process_image_message` descarga la imagen y le pide a Claude
+(que sí acepta imágenes en su API — no se agregó un servicio de OCR aparte) que extraiga
+proveedor, fecha, monto, moneda, número de documento, productos e impuestos, dejando en `null`
+cualquier campo que no aparezca con certeza en la foto (`app/ai/receipt_extraction.py`). El
+resultado se guarda en `media_logs.extracted_data` y se le presenta al agente conversacional
+como contexto (junto con el texto que el usuario haya escrito como descripción de la foto) para
+que complete el registro del gasto — la extracción nunca crea el gasto por sí sola, sigue
+siendo el agente quien decide llamar a la tool `crear_gasto`.
+
+Si `ANTHROPIC_API_KEY` no está configurada, o el formato de imagen no es compatible (solo
+JPEG/PNG/GIF/WEBP), el bot lo indica explícitamente en vez de simular una lectura.
+
+**Nota sobre almacenamiento**: la foto o el audio en sí no se guardan de forma permanente —
+se descargan, se procesan, y se descartan. Solo el resultado (transcripción o datos
+extraídos) queda en `media_logs`. Ver `docs/architecture.md` §8 para el riesgo asociado.
+
+### Otros tipos de mensaje (documentos, videos, stickers, ubicación, contactos)
+
+Todavía no soportados. El webhook responde:
+
+> "Por ahora solo puedo procesar mensajes de texto, audios y fotos de comprobantes. Ese tipo
+> de archivo todavía no lo puedo leer 🙂"
 
 ## Envío de mensajes salientes
 

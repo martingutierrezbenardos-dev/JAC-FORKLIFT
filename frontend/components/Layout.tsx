@@ -29,6 +29,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/">Inicio</Link>
           <Link href="/expenses">Gastos</Link>
           <Link href="/tasks">Tareas</Link>
+          <Link href="/services">Servicios</Link>
+          <Link href="/customers">Clientes</Link>
+          <Link href="/machines">Máquinas</Link>
           <Link href="/users">Usuarios</Link>
           <a
             href="#"

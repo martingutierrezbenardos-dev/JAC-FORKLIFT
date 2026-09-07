@@ -5,7 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.routes import auth, expenses, reports, tasks, users, whatsapp
+from app.api.routes import (
+    auth,
+    customers,
+    expenses,
+    machines,
+    reports,
+    service_orders,
+    tasks,
+    users,
+    whatsapp,
+)
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 
@@ -32,6 +42,9 @@ app.include_router(users.router)
 app.include_router(expenses.router)
 app.include_router(tasks.router)
 app.include_router(reports.router)
+app.include_router(customers.router)
+app.include_router(machines.router)
+app.include_router(service_orders.router)
 app.include_router(whatsapp.router)
 
 

@@ -32,7 +32,25 @@ Este flujo es la implementación concreta del principio "el LLM nunca modifica l
 datos directamente" (brief, sección 2): el LLM solo puede *pedir* que se ejecute una función;
 la decisión de ejecutarla ya, pedir confirmación, o rechazarla por permisos, es código.
 
-## Catálogo de herramientas — Fase 1
+## Entrada multimodal: audio e imágenes (Fase 2)
+
+La transcripción de audio y la extracción de datos de comprobantes (fotos) NO son tools que
+el LLM decida invocar — ocurren antes, en el webhook (`app/api/routes/whatsapp.py`), porque
+son un paso de normalización del mensaje de entrada, no una acción sobre el negocio. El
+agente conversacional solo ve el resultado como si fuera texto escrito por el usuario:
+
+- Un audio se transcribe y el texto transcrito se le pasa a `AgentSession.handle_message`
+  exactamente igual que un mensaje de texto.
+- Una foto se procesa con visión de Claude y se le arma al agente un mensaje con los datos
+  detectados (marcados explícitamente como "detectados automáticamente") más el texto que el
+  usuario haya escrito como descripción — el agente sigue siendo quien decide, usando la tool
+  `crear_gasto`, si registra el gasto y con qué datos, y puede preguntar por lo que falte
+  (típicamente la categoría, que una boleta no siempre deja clara).
+
+Ver `docs/whatsapp.md` para el detalle completo de esta parte del flujo, y
+`app/ai/receipt_extraction.py` / `app/integrations/transcription/provider.py` para el código.
+
+## Catálogo de herramientas
 
 Definidas en `app/tools/registry.py`, implementadas en `app/tools/*_tools.py`.
 
@@ -46,20 +64,31 @@ Definidas en `app/tools/registry.py`, implementadas en `app/tools/*_tools.py`.
 | `completar_tarea` | 1 (propia) / requiere `TASKS_COMPLETE_ALL` para ajenas | `TASKS_COMPLETE_OWN` | Marca una tarea como completada. |
 | `buscar_tareas` | 1 | `TASKS_READ_OWN` (auto-filtrado) o `TASKS_READ_ALL` | Lista tareas con filtros. |
 | `generar_reporte` | 1 | `REPORTS_VIEW_OWN` (auto-filtrado) o `REPORTS_VIEW_ALL` | Genera un resumen agregado de gastos o tareas por período/categoría/usuario. |
+| `crear_servicio` (Fase 2) | 1 | `SERVICES_CREATE_OWN` | Crea una orden de servicio técnico para quien escribe (visita a un cliente para revisar/reparar una máquina). |
+| `actualizar_servicio` (Fase 2) | 1, salvo que `estado=cerrado` (2) | `SERVICES_UPDATE_OWN` (propia) o `SERVICES_UPDATE_ALL` (ajena, requiere además `SERVICES_ASSIGN`); cerrar requiere `SERVICES_CLOSE` | Actualiza horas de salida/llegada/inicio/término, cliente, máquina, diagnóstico, trabajo realizado, repuestos, estado. Si no se indica el número de orden, usa la orden abierta más reciente de quien escribe — así el técnico puede reportar en lenguaje natural ("salí a las 8:30", "llegué donde el cliente") sin fricción. |
+| `buscar_servicios` (Fase 2) | 1 | `SERVICES_READ_OWN` (auto-filtrado) o `SERVICES_READ_ALL` | Busca órdenes de servicio por estado, técnico o cliente. |
+| `buscar_cliente` (Fase 2) | 1 | `CUSTOMERS_READ` | Ficha de un cliente (dirección, contacto, tipo, estado). |
+| `buscar_maquina` (Fase 2) | 1 | `MACHINES_READ` | Ficha de una máquina (marca, modelo, cliente asociado, horómetro, estado, ubicación). |
 
 Cada tool declara su `input_schema` con Pydantic, que se traduce a JSON Schema para el LLM
 (`model.dump_json_schema()`), así el contrato de datos es el mismo en la API REST y en la
 capa de IA — una sola fuente de verdad.
+
+Nota sobre `actualizar_servicio`: se decidió que solo **cerrar** una orden sea nivel 2. Los
+reportes rutinarios de horas y diagnóstico son exactamente el flujo natural que pide la
+sección 7 del brief ("Salí a las 8:30...", "Llegué donde ABC...") y exigir una confirmación en
+cada uno habría reintroducido la fricción de un formulario tradicional — lo contrario de lo
+que se busca. Cerrar la orden sí es una acción más definitiva (afecta reportes, facturación
+futura), por eso se trata como nivel 2 y además exige el permiso `SERVICES_CLOSE`, que solo
+tienen jefe de servicios técnicos, gerente general y admin del sistema.
 
 ## Herramientas planificadas para fases futuras (documentadas, no implementadas)
 
 Se listan explícitamente para que quede claro que existen en el diseño pero no en código
 todavía (nada de esto está "simulado" en el agente):
 
-- `crear_servicio`, `actualizar_servicio` (Fase 2, requiere `service_orders`)
-- `buscar_maquina`, `crear_mantenimiento` (Fase 2/3, requiere `machines` completo +
-  `maintenance_records`)
-- `buscar_cliente` (Fase 2)
+- `crear_mantenimiento`, alertas de mantenimiento preventivo (Fase 3, requiere
+  `maintenance_records` y los campos de mantenimiento de `machines`)
 - `crear_reunion`, `consultar_calendario` (Fase 3, requiere integración Google Calendar real)
 - `preparar_correo`, `enviar_correo` (Fase 4, `enviar_correo` siempre nivel 2: se prepara un
   borrador y se pide confirmación explícita antes de enviar, tal como pide la sección 14)

@@ -1,23 +1,32 @@
 # Jacobea AI
 
 IA conversacional de gestión interna para **Jacobea Forklift Chile**. Los trabajadores
-escriben (o, en fases futuras, hablan) por WhatsApp y el sistema transforma esos mensajes en
-registros estructurados de gastos, tareas y consultas — sin planillas ni formularios.
+escriben, hablan o mandan una foto por WhatsApp y el sistema transforma esos mensajes en
+registros estructurados de gastos, tareas, servicios técnicos y consultas — sin planillas ni
+formularios.
 
 Este README está escrito para que lo pueda seguir alguien que no programa. Si algo no queda
 claro, revisa `docs/` (hay un documento por tema) antes de tocar código.
 
-## 1. ¿Qué hace el sistema hoy (Fase 1 — MVP)?
+## 1. ¿Qué hace el sistema hoy (Fase 1 + Fase 2)?
 
 - Un trabajador registrado le escribe por WhatsApp cosas como *"Compré un rodamiento en
   Repuestos X, 85 lucas, plata mía"* y el sistema registra automáticamente el gasto.
-- Se puede preguntar *"¿Cuánto he gastado este mes?"* o *"¿Qué tareas tengo pendientes?"* y
-  el sistema responde con datos reales de la base de datos (nunca inventados).
+- También puede **decirlo por audio** — se transcribe automáticamente — o **mandar una foto
+  de la boleta**, de la cual se extraen proveedor, monto, fecha, etc. automáticamente.
+- Un técnico puede reportar un servicio en lenguaje natural: *"Salí a las 8:30"*, *"Llegué
+  donde el cliente ABC"*, *"Estoy atendiendo la máquina 33"*, *"Terminé, era el alternador"* —
+  cada mensaje actualiza la misma orden de servicio sin que el técnico tenga que dar un
+  número o llenar un formulario.
+- Se puede preguntar *"¿Cuánto he gastado este mes?"*, *"¿Qué tareas tengo pendientes?"* o
+  *"¿Qué sabes de la máquina 33?"* y el sistema responde con datos reales de la base de datos
+  (nunca inventados).
 - Cada rol (técnico, vendedor, administración, gerencia, etc.) ve solo la información que le
   corresponde — un técnico no puede ver el gasto total de la empresa, por ejemplo.
-- Acciones sensibles (modificar un gasto, asignarle una tarea a otra persona) piden
-  confirmación explícita antes de ejecutarse.
-- Hay un panel web mínimo para ver usuarios, gastos y tareas desde el navegador.
+- Acciones sensibles (modificar un gasto, asignarle una tarea a otra persona, cerrar una
+  orden de servicio) piden confirmación explícita antes de ejecutarse.
+- Hay un panel web mínimo para ver usuarios, gastos, tareas, servicios técnicos, clientes y
+  máquinas desde el navegador.
 
 Lo que **todavía no existe** (y por qué) está documentado en
 `docs/architecture.md` (sección "Qué es real y qué es placeholder").
@@ -51,8 +60,8 @@ JAC-FORKLIFT/
 │   │   ├── services/            lógica de negocio + auditoría
 │   │   ├── auth/                 JWT y dependencias de autenticación
 │   │   ├── api/routes/           endpoints REST + webhook de WhatsApp
-│   │   ├── integrations/         WhatsApp (real), GPS/Calendar/Email (placeholders)
-│   │   ├── ai/                   cliente LLM + loop del agente
+│   │   ├── integrations/         WhatsApp (real), transcripción (real), GPS/Calendar/Email (placeholders)
+│   │   ├── ai/                   cliente LLM + loop del agente + extracción de comprobantes (visión)
 │   │   └── tools/                catálogo de herramientas del agente
 │   ├── alembic/                  migraciones de base de datos
 │   └── tests/                    pruebas automatizadas (pytest)
@@ -68,7 +77,8 @@ JAC-FORKLIFT/
 - Python 3.11+
 - Node.js 20+
 - PostgreSQL 16 (local o vía Docker)
-- Una cuenta de Anthropic con una API key (para el agente de IA)
+- Una cuenta de Anthropic con una API key (para el agente de IA y la lectura de comprobantes)
+- Una cuenta de OpenAI con una API key (opcional, solo para transcribir audios — Fase 2)
 - Una cuenta de Meta Business con WhatsApp Cloud API configurada (para producción real; no
   es necesaria para desarrollar o correr los tests)
 
@@ -93,6 +103,7 @@ pip install -r requirements.txt
 
 cp ../.env.example .env
 # Edita backend/.env: como mínimo, ANTHROPIC_API_KEY para que el agente de IA funcione.
+# OPENAI_API_KEY es opcional (solo se usa para transcribir audios de WhatsApp).
 
 alembic upgrade head              # crea todas las tablas
 python -m app.db.seed             # carga usuarios/clientes/máquinas de prueba (ficticios)
@@ -188,16 +199,26 @@ administrado + despliegue directo desde Git + HTTPS automático).
 
 ## 11. Estado del proyecto y próximos pasos
 
-**Fase 1 (MVP) — completada en este commit:** WhatsApp (solo texto), agente de IA con tool
-calling, usuarios/roles/permisos, gastos (crear/consultar/modificar/reportar), tareas
+**Fase 1 (MVP) — completada:** WhatsApp (texto), agente de IA con tool calling,
+usuarios/roles/permisos, gastos (crear/consultar/modificar/reportar), tareas
 (crear/consultar/completar), base de datos PostgreSQL con migraciones, panel web mínimo,
 tests automatizados.
 
+**Fase 2 — completada en este commit:**
+- Audio: transcripción real con la API de Whisper de OpenAI.
+- Fotos de comprobantes: extracción real de datos (proveedor, monto, fecha, etc.) usando la
+  visión de Claude — nunca inventa un dato que no esté en la imagen.
+- Servicios técnicos (`service_orders`): los técnicos reportan salida, llegada, inicio,
+  término, diagnóstico y trabajo realizado en lenguaje natural, sin dar un número de orden.
+- Clientes y máquinas: fichas completas consultables por WhatsApp (`buscar_cliente`,
+  `buscar_maquina`) y listados en el panel web.
+- 62 tests automatizados en total (25 nuevos de Fase 2).
+
 **Pendiente (fases futuras, ver `docs/architecture.md` §9):**
-- Fase 2: audio + transcripción, OCR de comprobantes, servicios técnicos, clientes, máquinas.
 - Fase 3: mantenimiento preventivo + alertas, reportes avanzados (Excel/PDF), dashboard,
   Google Calendar.
-- Fase 4: correo electrónico, GPS, camionetas, grúas.
+- Fase 4: correo electrónico, GPS, camionetas, grúas, almacenamiento permanente de archivos
+  (S3/GCS) — hoy las fotos/audios de WhatsApp se procesan al vuelo y no se guardan.
 - Fase 5: inteligencia empresarial (comparativas, resúmenes ejecutivos basados en datos).
 
 No se implementó ninguna de estas para no simular integraciones que no existen todavía — ver

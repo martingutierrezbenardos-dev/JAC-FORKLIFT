@@ -15,11 +15,23 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.permissions import Permission, UserRole, has_permission
+from app.models.service_order import ServiceOrderStatus
 from app.models.user import User
+from app.schemas.customer import BuscarClienteInput
 from app.schemas.expense import ExpenseCreate, ExpenseSearchParams, ExpenseUpdateToolInput
+from app.schemas.machine import BuscarMaquinaInput
+from app.schemas.service_order import ServiceOrderCreate, ServiceOrderSearchParams, ServiceOrderUpdate
 from app.schemas.task import CompletarTareaInput, TaskCreate, TaskSearchParams
 from app.schemas.user import BuscarUsuarioInput
-from app.tools import expense_tools, report_tools, task_tools, user_tools
+from app.tools import (
+    customer_tools,
+    expense_tools,
+    machine_tools,
+    report_tools,
+    service_tools,
+    task_tools,
+    user_tools,
+)
 
 ConfirmationLevelFn = Callable[[BaseModel, User], int]
 
@@ -55,6 +67,16 @@ def _crear_tarea_confirmation_level(data: BaseModel, actor: User) -> int:
     # No tenemos sesión de DB aquí; la asignación a uno mismo ya cubre el caso común.
     # Si el teléfono difiere del de quien escribe, se trata como asignación a un tercero.
     return 2
+
+
+def _actualizar_servicio_confirmation_level(data: BaseModel, actor: User) -> int:
+    assert isinstance(data, ServiceOrderUpdate)
+    # Cerrar una orden de servicio es una acción más definitiva; el resto de campos
+    # (horas, diagnóstico, trabajo realizado) son el reporte natural y frecuente del técnico
+    # y no deben interrumpirse con una confirmación (ver sección 7 del brief).
+    if data.estado == ServiceOrderStatus.CERRADO:
+        return 2
+    return 1
 
 
 REGISTRY: dict[str, ToolDefinition] = {
@@ -138,6 +160,59 @@ REGISTRY: dict[str, ToolDefinition] = {
         input_model=report_tools.GenerarReporteInput,
         handler=report_tools.generar_reporte,
         required_permission=Permission.REPORTS_VIEW_OWN,
+        confirmation_level=1,
+    ),
+    "crear_servicio": ToolDefinition(
+        name="crear_servicio",
+        description=(
+            "Crea una nueva orden de servicio técnico para quien escribe (una visita a un "
+            "cliente para revisar o reparar una máquina). Usa esto cuando un técnico avise "
+            "que va a atender o está atendiendo a un cliente."
+        ),
+        input_model=ServiceOrderCreate,
+        handler=service_tools.crear_servicio,
+        required_permission=Permission.SERVICES_CREATE_OWN,
+        confirmation_level=1,
+    ),
+    "actualizar_servicio": ToolDefinition(
+        name="actualizar_servicio",
+        description=(
+            "Actualiza la orden de servicio técnico abierta de quien escribe (o la que se "
+            "indique por número): horas de salida/llegada/inicio/término, cliente, máquina, "
+            "diagnóstico, trabajo realizado, repuestos utilizados, observaciones o estado. "
+            "Usa esto para reportes como 'salí a las 8:30', 'llegué donde el cliente', "
+            "'estoy atendiendo la máquina 33' o 'terminé, era el alternador'."
+        ),
+        input_model=ServiceOrderUpdate,
+        handler=service_tools.actualizar_servicio,
+        required_permission=Permission.SERVICES_UPDATE_OWN,
+        confirmation_level=_actualizar_servicio_confirmation_level,
+    ),
+    "buscar_servicios": ToolDefinition(
+        name="buscar_servicios",
+        description="Busca órdenes de servicio técnico con filtros de estado, técnico o cliente.",
+        input_model=ServiceOrderSearchParams,
+        handler=service_tools.buscar_servicios,
+        required_permission=Permission.SERVICES_READ_OWN,
+        confirmation_level=1,
+    ),
+    "buscar_cliente": ToolDefinition(
+        name="buscar_cliente",
+        description="Busca la ficha de un cliente por nombre (dirección, contacto, tipo, estado).",
+        input_model=BuscarClienteInput,
+        handler=customer_tools.buscar_cliente,
+        required_permission=Permission.CUSTOMERS_READ,
+        confirmation_level=1,
+    ),
+    "buscar_maquina": ToolDefinition(
+        name="buscar_maquina",
+        description=(
+            "Busca la ficha de una máquina por su número interno (marca, modelo, cliente "
+            "asociado, horómetro, estado, ubicación)."
+        ),
+        input_model=BuscarMaquinaInput,
+        handler=machine_tools.buscar_maquina,
+        required_permission=Permission.MACHINES_READ,
         confirmation_level=1,
     ),
 }

@@ -78,6 +78,29 @@ class WhatsAppClient:
         response.raise_for_status()
         return response.json()
 
+    def download_media(self, media_id: str) -> tuple[bytes, str]:
+        """Descarga un archivo multimedia (audio/imagen/documento) recibido por WhatsApp.
+
+        Meta no entrega una URL pública permanente: primero hay que resolver la URL temporal
+        del archivo (expira en minutos) y luego descargarlo con el mismo token de acceso.
+        Devuelve ``(contenido, mime_type)``. No se guarda el archivo en almacenamiento propio
+        — no hay todavía un proveedor de almacenamiento configurado (ver
+        docs/architecture.md); quien llama a este método es responsable de procesarlo al
+        vuelo (transcripción, extracción) y descartarlo.
+        """
+        _, access_token = self._require_credentials()
+        headers = {"Authorization": f"Bearer {access_token}"}
+        with httpx.Client(timeout=30.0) as client:
+            meta_response = client.get(f"{self._base_url}/{media_id}", headers=headers)
+            meta_response.raise_for_status()
+            media_url = meta_response.json()["url"]
+
+            file_response = client.get(media_url, headers=headers)
+            file_response.raise_for_status()
+
+        mime_type = file_response.headers.get("Content-Type", "application/octet-stream")
+        return file_response.content, mime_type
+
     def verify_signature(self, payload_body: bytes, signature_header: str | None) -> bool:
         """Valida X-Hub-Signature-256 usando WHATSAPP_APP_SECRET (HMAC-SHA256)."""
         if not self._settings.whatsapp_app_secret:

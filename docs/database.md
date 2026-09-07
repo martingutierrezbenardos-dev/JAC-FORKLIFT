@@ -12,7 +12,7 @@ Convenciones globales (todas las tablas, vía `app/models/base.py::Base` y `Time
   `maintenance_records` y `tasks` usan **soft delete** (`deleted_at` nullable). El resto de
   entidades de catálogo (customers, machines, users) también lo usan vía `activo`/`estado`.
 
-## Entidades implementadas en Fase 1
+## Entidades implementadas
 
 ### `users`
 | Campo | Tipo | Notas |
@@ -109,41 +109,99 @@ base de datos, no en el modelo).
 | content | text | |
 | created_at | timestamp | |
 
-## Entidades modeladas para no romper relaciones futuras (esquema presente, sin API/tools en Fase 1)
+### `customers`
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| nombre | str | |
+| rut | str, único, nullable | |
+| direccion, comuna, ciudad | str, nullable | |
+| contacto | str, nullable | nombre de la persona de contacto |
+| telefono, email | str, nullable | |
+| tipo_cliente | str, nullable | texto libre (ej. "empresa", "particular") |
+| estado | str | default `activo` |
 
-Se crean ahora en el esquema (tablas mínimas) porque `expenses` ya referencia `cliente_id` y
-`maquina_id`, y porque cambiar claves foráneas después de tener datos reales es más riesgoso
-que definir la tabla mínima desde el día uno:
+### `machines`
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| numero_interno | str, único | el identificador que usan los técnicos (ej. "33") |
+| numero_serie, marca, modelo, tipo | str, nullable | |
+| cliente_id | FK customers, nullable | dónde está instalada actualmente |
+| horometro | int, nullable | Fase 3 lo mantendrá actualizado automáticamente vía mantenimiento |
+| estado | str | default `operativa` |
+| ubicacion, observaciones | str/text, nullable | |
 
-- `customers` (id, nombre, rut, direccion, comuna, ciudad, contacto, telefono, email,
-  tipo_cliente, estado)
-- `machines` (id, numero_interno, numero_serie, marca, modelo, tipo, cliente_id, horometro,
-  fecha_ultimo_mantenimiento, fecha_proximo_mantenimiento, horas_proximo_mantenimiento,
-  estado, ubicacion, observaciones)
+Los campos de mantenimiento (`fecha_ultimo_mantenimiento`, `fecha_proximo_mantenimiento`,
+`horas_proximo_mantenimiento`) del diseño original del brief se agregan en Fase 3 junto con
+`maintenance_records`, para no crear columnas que ningún flujo llena todavía.
 
-No se crean todavía (se diseñarán en su fase correspondiente porque sus reglas de negocio
-aún no están definidas con suficiente detalle): `service_orders`, `maintenance_records`,
-`vehicles`, `gps_events`, `crane_contracts`, `crane_usage`, `attachments`.
+### `service_orders` (órdenes de servicio técnico) — Fase 2
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| numero | str, único | generado desde la secuencia `service_order_number_seq`, formato `OT-000123` |
+| cliente_id | FK customers, nullable | |
+| maquina_id | FK machines, nullable | |
+| tecnico_id | FK users | quién atiende el servicio |
+| fecha | date | fecha de creación de la orden |
+| hora_salida / hora_llegada / hora_inicio / hora_termino | timestamp, nullable | reportados progresivamente por WhatsApp |
+| motivo | text, nullable | por qué se generó la visita |
+| diagnostico, trabajo_realizado, repuestos_utilizados, resultado | text, nullable | |
+| estado | enum `ServiceOrderStatus` | pendiente, asignado, en_ruta, en_servicio, terminado, cerrado, cancelado |
+| observaciones | text, nullable | |
+| deleted_at | timestamp, nullable | soft delete |
 
-## Diagrama de relaciones (Fase 1)
+### `media_logs` — Fase 2
+Auditoría de cada archivo multimedia recibido por WhatsApp (sección 8 del brief: "la
+transcripción debe conservarse opcionalmente para auditoría"). El archivo en sí **no** se
+guarda de forma permanente — ver `architecture.md` §7 y §8 (riesgo de almacenamiento).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| user_id | FK users | |
+| wa_media_id | str | referencia del archivo en Meta (temporal) |
+| media_type | enum (`audio`, `image`, `document`) | |
+| mime_type | str, nullable | |
+| transcript | text, nullable | resultado de transcripción (audio) |
+| extracted_data | JSONB, nullable | resultado de extracción (imagen/comprobante) |
+| error | text, nullable | si el procesamiento falló |
+
+## Entidades aún no creadas (fases futuras)
+
+Sus reglas de negocio no están definidas con suficiente detalle todavía: `maintenance_records`
+(Fase 3), `vehicles`, `gps_events`, `crane_contracts`, `crane_usage` (Fase 4), `attachments`
+como tabla genérica de almacenamiento permanente de archivos (Fase 4, junto con un
+`FileStorageProvider` real).
+
+## Diagrama de relaciones
 
 ```
 users ──< expenses >── customers
   │           │
-  │           └──< machines
+  │           └──< machines >── customers
   │
+  ├──< service_orders >── customers
+  ├──< service_orders >── machines
   ├──< tasks (asignado_a)
   ├──< tasks (creado_por)
   ├──< pending_actions
   ├──< conversation_messages
+  ├──< media_logs
   └──< audit_logs
 ```
 
 ## Migraciones
 
-Alembic vive en `backend/alembic/`. La migración inicial (`0001_initial_schema.py`) crea
-todas las tablas de Fase 1 más `customers`/`machines` (vacías). Para generar nuevas
-migraciones tras modificar un modelo:
+Alembic vive en `backend/alembic/`. Migraciones aplicadas:
+
+- `0001_initial_schema.py`: usuarios, gastos, tareas, `customers`/`machines` (vacías),
+  auditoría, acciones pendientes, mensajes de conversación (Fase 1).
+- `0002_fase2_servicios_tecnicos.py`: `service_orders` (+ secuencia
+  `service_order_number_seq` para el número de OT), `media_logs` (Fase 2).
+
+Para generar nuevas migraciones tras modificar un modelo:
 
 ```bash
 cd backend
@@ -155,4 +213,5 @@ alembic upgrade head
 
 `backend/app/db/seed.py` crea usuarios, clientes y máquinas ficticias de desarrollo (Juan y
 Cristian técnicos, Marcela administración, Pedro gerente general; Cliente A/B/C; Máquinas
-33/42/51), tal como pide la sección 33 del brief. Nunca usa datos reales de la empresa.
+33/42/51, dos de ellas asociadas a un cliente para poder probar las relaciones), tal como pide
+la sección 33 del brief. Nunca usa datos reales de la empresa.

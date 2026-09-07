@@ -8,26 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import NotFoundError, PermissionDeniedError, ValidationDomainError
 from app.core.permissions import Permission, UserRole, has_permission
-from app.models.customer import Customer
 from app.models.expense import Expense, PaymentMethod, ReimbursementStatus
-from app.models.machine import Machine
 from app.models.user import User
 from app.schemas.expense import ExpenseCreate, ExpenseSearchParams, ExpenseUpdate
 from app.services import audit_service, user_service
-
-
-def _resolve_customer(db: Session, nombre: str | None) -> Customer | None:
-    if not nombre:
-        return None
-    stmt = select(Customer).where(Customer.nombre.ilike(f"%{nombre}%"))
-    return db.execute(stmt).scalars().first()
-
-
-def _resolve_machine(db: Session, numero_interno: str | None) -> Machine | None:
-    if not numero_interno:
-        return None
-    stmt = select(Machine).where(Machine.numero_interno.ilike(numero_interno))
-    return db.execute(stmt).scalars().first()
+from app.services.lookup_service import resolve_customer_by_name, resolve_machine_by_number
 
 
 def create_expense(db: Session, *, actor: User, data: ExpenseCreate, canal: str = "whatsapp") -> Expense:
@@ -36,11 +21,11 @@ def create_expense(db: Session, *, actor: User, data: ExpenseCreate, canal: str 
     if not has_permission(actor.rol, Permission.EXPENSES_CREATE_OWN):
         raise PermissionDeniedError("No tienes permiso para registrar gastos.")
 
-    customer = _resolve_customer(db, data.cliente_nombre)
+    customer = resolve_customer_by_name(db, data.cliente_nombre)
     if data.cliente_nombre and customer is None:
         raise ValidationDomainError(f"No encontré ningún cliente llamado '{data.cliente_nombre}'.")
 
-    machine = _resolve_machine(db, data.maquina_numero)
+    machine = resolve_machine_by_number(db, data.maquina_numero)
     if data.maquina_numero and machine is None:
         raise ValidationDomainError(f"No encontré ninguna máquina con número '{data.maquina_numero}'.")
 
