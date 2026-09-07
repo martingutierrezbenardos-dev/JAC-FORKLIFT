@@ -8,7 +8,7 @@ formularios.
 Este README está escrito para que lo pueda seguir alguien que no programa. Si algo no queda
 claro, revisa `docs/` (hay un documento por tema) antes de tocar código.
 
-## 1. ¿Qué hace el sistema hoy (Fases 1 a 3)?
+## 1. ¿Qué hace el sistema hoy (Fases 1 a 4)?
 
 - Un trabajador registrado le escribe por WhatsApp cosas como *"Compré un rodamiento en
   Repuestos X, 85 lucas, plata mía"* y el sistema registra automáticamente el gasto.
@@ -27,13 +27,22 @@ claro, revisa `docs/` (hay un documento por tema) antes de tocar código.
 - Se puede pedir un reporte por período (día/semana/mes) y descargarlo en CSV, Excel o PDF.
 - Se puede agendar una reunión (*"agenda una reunión con Cristian mañana a las 10"*): el
   sistema verifica disponibilidad en Google Calendar antes de agendar y pide confirmación.
+- Se puede pedir *"prepárame un correo para el cliente ABC con el informe de esta semana"*: el
+  sistema arma un borrador real en Gmail y solo lo envía si el usuario confirma explícitamente.
+- Se puede consultar la ficha de un vehículo de la empresa por patente; la ubicación GPS,
+  kilometraje e historial de viajes están listos en el código pero responden honestamente que
+  el GPS no está configurado hasta que la empresa defina un proveedor (no se simula ubicación).
+- Se pueden registrar horas de uso de grúa contra el contrato de un cliente, y el sistema avisa
+  automáticamente cuando un contrato está por agotarse (≥85% de las horas usadas).
+- Las fotos de comprobantes se pueden guardar de forma permanente (AWS S3, opcional) y quedan
+  enlazadas al gasto correspondiente como respaldo.
 - Cada rol (técnico, vendedor, administración, gerencia, etc.) ve solo la información que le
   corresponde — un técnico no puede ver el gasto total de la empresa, por ejemplo.
 - Acciones sensibles (modificar un gasto, asignarle una tarea a otra persona, cerrar una
-  orden de servicio, agendar una reunión con terceros) piden confirmación explícita antes de
-  ejecutarse.
+  orden de servicio, agendar una reunión con terceros, enviar un correo) piden confirmación
+  explícita antes de ejecutarse.
 - Hay un panel web con un dashboard de indicadores y listados de usuarios, gastos, tareas,
-  servicios técnicos, clientes y máquinas.
+  servicios técnicos, clientes, máquinas, vehículos y contratos de grúa.
 
 Lo que **todavía no existe** (y por qué) está documentado en
 `docs/architecture.md` (sección "Qué es real y qué es placeholder").
@@ -67,7 +76,7 @@ JAC-FORKLIFT/
 │   │   ├── services/            lógica de negocio + auditoría
 │   │   ├── auth/                 JWT y dependencias de autenticación
 │   │   ├── api/routes/           endpoints REST + webhook de WhatsApp
-│   │   ├── integrations/         WhatsApp (real), transcripción (real), GPS/Calendar/Email (placeholders)
+│   │   ├── integrations/         WhatsApp, transcripción, visión, Calendar, Gmail, S3 (reales); GPS (placeholder, sin proveedor definido)
 │   │   ├── ai/                   cliente LLM + loop del agente + extracción de comprobantes (visión)
 │   │   └── tools/                catálogo de herramientas del agente
 │   ├── alembic/                  migraciones de base de datos
@@ -86,10 +95,13 @@ JAC-FORKLIFT/
 - PostgreSQL 16 (local o vía Docker)
 - Una cuenta de Anthropic con una API key (para el agente de IA y la lectura de comprobantes)
 - Una cuenta de OpenAI con una API key (opcional, solo para transcribir audios — Fase 2)
-- Una cuenta de servicio de Google Workspace (opcional, solo para crear/consultar reuniones
-  en Google Calendar — Fase 3; ver `docs/architecture.md` riesgo 8)
+- Una cuenta de servicio de Google Workspace (opcional, para crear/consultar reuniones en
+  Google Calendar — Fase 3 — y/o para preparar/enviar/buscar correos en Gmail — Fase 4; ver
+  `docs/architecture.md` riesgo 8)
 - Una cuenta de Meta Business con WhatsApp Cloud API configurada (para producción real; no
   es necesaria para desarrollar o correr los tests)
+- Un bucket de AWS S3 (opcional, solo para guardar de forma permanente las fotos de
+  comprobantes — Fase 4; sin esto, las fotos se procesan igual pero no se guardan)
 
 ## 5. Instalación paso a paso (desarrollo local, sin Docker)
 
@@ -222,7 +234,7 @@ tests automatizados.
 - Clientes y máquinas: fichas completas consultables por WhatsApp (`buscar_cliente`,
   `buscar_maquina`) y listados en el panel web.
 
-**Fase 3 — completada en este commit:**
+**Fase 3 — completada:**
 - Mantenimiento preventivo (`maintenance_records`): registro por WhatsApp, cálculo automático
   de la próxima fecha/horómetro, y alertas de máquinas atrasadas o próximas a vencer.
 - Reportes avanzados: por trabajador, proveedor, cliente, máquina y sucursal; por día, semana
@@ -231,12 +243,25 @@ tests automatizados.
 - Dashboard web con indicadores clave y gráficos de barras simples.
 - Google Calendar real (cuenta de servicio con delegación de dominio): verifica disponibilidad
   antes de agendar una reunión, tal como pide el brief.
-- 87 tests automatizados en total (25 nuevos de Fase 3).
+
+**Fase 4 — completada en este commit:**
+- Correo electrónico real (Gmail, misma cuenta de servicio de Google Workspace que Calendar):
+  `preparar_correo` arma un borrador, `enviar_correo` lo envía pero **siempre** pide
+  confirmación explícita (nivel 2 fijo, sin excepción), `buscar_correos` consulta la casilla.
+- Vehículos de la empresa: ficha por patente (`buscar_vehiculo`) y listado en el panel web. GPS
+  (ubicación, kilometraje, viajes) queda con una interfaz lista pero sin proveedor conectado
+  todavía — responde honestamente que no está configurado, nunca simula una ubicación.
+- Grúas: contratos por cliente (horas contratadas, período, costo/hora — se crean solo desde el
+  panel web, es una decisión comercial), registro de uso por WhatsApp
+  (`registrar_uso_grua`) y alerta automática cuando un contrato supera el 85% de uso
+  (`consultar_horas_grua`, tarjeta destacada en el panel web).
+- Almacenamiento permanente de fotos de comprobantes en AWS S3 (opcional): si está configurado,
+  la URL queda guardada en `media_logs` y disponible para adjuntarla al gasto.
+- 111 tests automatizados en total (24 nuevos de Fase 4).
 
 **Pendiente (fases futuras, ver `docs/architecture.md` §9):**
-- Fase 4: correo electrónico, GPS, camionetas, grúas, almacenamiento permanente de archivos
-  (S3/GCS) — hoy las fotos/audios de WhatsApp se procesan al vuelo y no se guardan — y
-  recordatorios proactivos de mantenimiento por WhatsApp (requiere plantillas aprobadas por Meta).
+- Fase 4 (resto, aún no implementado): proveedor GPS real, recordatorios proactivos de
+  mantenimiento por WhatsApp (requiere plantillas aprobadas por Meta).
 - Fase 5: inteligencia empresarial (comparativas, resúmenes ejecutivos basados en datos).
 
 No se implementó ninguna de estas para no simular integraciones que no existen todavía — ver

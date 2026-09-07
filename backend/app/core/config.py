@@ -49,9 +49,18 @@ class Settings(BaseSettings):
     # Tamaño máximo de un archivo multimedia de WhatsApp que se procesa (bytes)
     max_media_download_bytes: int = Field(default=20 * 1024 * 1024)
 
-    # Google Calendar (cuenta de servicio con delegación de dominio) — Fase 3
+    # Google Calendar / Gmail (cuenta de servicio con delegación de dominio) — Fase 3/4
     # Contenido completo del JSON de credenciales de la cuenta de servicio (no una ruta).
     google_service_account_json: str | None = Field(default=None)
+
+    # Almacenamiento permanente de archivos (S3) — Fase 4
+    # Si aws_s3_bucket no está configurado, las fotos de comprobantes se procesan al vuelo y
+    # no se guardan (comportamiento de Fase 2/3). Las credenciales AWS explícitas son
+    # opcionales: si se omiten, boto3 usa su cadena de credenciales estándar (perfil, rol IAM).
+    aws_s3_bucket: str | None = Field(default=None)
+    aws_region: str | None = Field(default=None)
+    aws_access_key_id: str | None = Field(default=None)
+    aws_secret_access_key: str | None = Field(default=None)
 
     # Rate limiting
     rate_limit_webhook: str = Field(default="30/minute")

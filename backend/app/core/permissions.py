@@ -56,6 +56,13 @@ class Permission(str, Enum):
     MAINTENANCE_READ = "maintenance:read"
 
     CALENDAR_USE = "calendar:use"
+    EMAIL_USE = "email:use"
+
+    VEHICLES_READ = "vehicles:read"
+
+    CRANES_REGISTER = "cranes:register"
+    CRANES_READ = "cranes:read"
+    CRANES_MANAGE = "cranes:manage"
 
 
 _BASE_FIELD_PERMISSIONS: set[Permission] = {
@@ -74,6 +81,10 @@ _BASE_FIELD_PERMISSIONS: set[Permission] = {
     Permission.MAINTENANCE_CREATE,
     Permission.MAINTENANCE_READ,
     Permission.CALENDAR_USE,
+    Permission.EMAIL_USE,
+    Permission.VEHICLES_READ,
+    Permission.CRANES_REGISTER,
+    Permission.CRANES_READ,
 }
 
 _BACK_OFFICE_PERMISSIONS: set[Permission] = _BASE_FIELD_PERMISSIONS | {
@@ -87,6 +98,7 @@ _BACK_OFFICE_PERMISSIONS: set[Permission] = _BASE_FIELD_PERMISSIONS | {
     Permission.REPORTS_VIEW_ALL,
     Permission.SERVICES_READ_ALL,
     Permission.SERVICES_UPDATE_ALL,
+    Permission.CRANES_MANAGE,
 }
 
 _ALL_PERMISSIONS: set[Permission] = set(Permission)

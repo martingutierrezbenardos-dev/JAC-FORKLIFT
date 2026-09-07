@@ -27,15 +27,18 @@ Definida en `app/core/permissions.py`. Permisos (`Permission` enum):
 - `CUSTOMERS_READ`, `MACHINES_READ` (Fase 2)
 - `MAINTENANCE_CREATE`, `MAINTENANCE_READ` (Fase 3)
 - `CALENDAR_USE` (Fase 3)
+- `EMAIL_USE` (Fase 4)
+- `VEHICLES_READ` (Fase 4)
+- `CRANES_REGISTER`, `CRANES_READ`, `CRANES_MANAGE` (Fase 4)
 
 | Rol | Permisos |
 |---|---|
-| `tecnico` | EXPENSES_CREATE_OWN, EXPENSES_READ_OWN, EXPENSES_UPDATE_OWN, TASKS_CREATE_OWN, TASKS_READ_OWN, TASKS_COMPLETE_OWN, REPORTS_VIEW_OWN, SERVICES_CREATE_OWN, SERVICES_READ_OWN, SERVICES_UPDATE_OWN, CUSTOMERS_READ, MACHINES_READ, MAINTENANCE_CREATE, MAINTENANCE_READ, CALENDAR_USE |
+| `tecnico` | EXPENSES_CREATE_OWN, EXPENSES_READ_OWN, EXPENSES_UPDATE_OWN, TASKS_CREATE_OWN, TASKS_READ_OWN, TASKS_COMPLETE_OWN, REPORTS_VIEW_OWN, SERVICES_CREATE_OWN, SERVICES_READ_OWN, SERVICES_UPDATE_OWN, CUSTOMERS_READ, MACHINES_READ, MAINTENANCE_CREATE, MAINTENANCE_READ, CALENDAR_USE, EMAIL_USE, VEHICLES_READ, CRANES_REGISTER, CRANES_READ |
 | `vendedor` | igual que técnico |
-| `administracion` | EXPENSES_READ_ALL, EXPENSES_UPDATE_ALL, EXPENSES_APPROVE_REIMBURSEMENT, TASKS_READ_ALL, TASKS_ASSIGN_OTHERS, TASKS_COMPLETE_ALL, USERS_READ_ALL, REPORTS_VIEW_ALL, SERVICES_READ_ALL, SERVICES_UPDATE_ALL, + permisos de técnico |
+| `administracion` | EXPENSES_READ_ALL, EXPENSES_UPDATE_ALL, EXPENSES_APPROVE_REIMBURSEMENT, TASKS_READ_ALL, TASKS_ASSIGN_OTHERS, TASKS_COMPLETE_ALL, USERS_READ_ALL, REPORTS_VIEW_ALL, SERVICES_READ_ALL, SERVICES_UPDATE_ALL, CRANES_MANAGE, + permisos de técnico |
 | `jefe_servicios_tecnicos` | igual que administración (salvo EXPENSES_APPROVE_REIMBURSEMENT y USERS_READ_ALL) + SERVICES_ASSIGN, SERVICES_CLOSE |
 | `gerente_sucursal` | todos los de administración, alcance limitado a su sucursal (filtrado en `services/`) |
-| `gerente_marketing` | REPORTS_VIEW_OWN, TASKS_* propios (no financiero, sin acceso a gastos/servicios/clientes/máquinas/mantenimiento/calendario) |
+| `gerente_marketing` | REPORTS_VIEW_OWN, TASKS_* propios (no financiero, sin acceso a gastos/servicios/clientes/máquinas/mantenimiento/calendario/correo/vehículos/grúas) |
 | `responsable_mercado_publico` | permisos de técnico + REPORTS_VIEW_OWN |
 | `gerente_general` | todos los permisos, sin restricción de sucursal |
 | `admin_sistema` | todos los permisos + USERS_MANAGE (crear/editar usuarios y roles) |
@@ -105,7 +108,13 @@ Toda escritura hecha por un tool de IA o por la API REST sobre `expenses`, `task
 
 ## Qué NO hace el sistema (por diseño, en este estado)
 
-- No envía correos externos automáticamente (sección 14): solo prepara borradores.
+- No envía un correo sin confirmación explícita (sección 14): `preparar_correo` solo crea un
+  borrador; `enviar_correo` es siempre nivel 2, sin excepción, y solo envía un borrador ya
+  creado.
+- No simula GPS: sin un proveedor GPS configurado, las tools de vehículos devuelven un error
+  claro en vez de datos inventados (ver `architecture.md`, riesgo 10).
+- No permite crear contratos de grúa por WhatsApp/IA: es una operación solo-REST que requiere
+  `CRANES_MANAGE` (ver `ai-tools.md`).
 - No ejecuta pagos ni transferencias (nivel 3): no existen tools de ese tipo todavía.
 - No borra información físicamente en entidades de negocio: usa soft delete.
 - No inventa datos que no están en la base de datos ni en un comprobante adjunto.

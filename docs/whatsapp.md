@@ -75,9 +75,15 @@ siendo el agente quien decide llamar a la tool `crear_gasto`.
 Si `ANTHROPIC_API_KEY` no está configurada, o el formato de imagen no es compatible (solo
 JPEG/PNG/GIF/WEBP), el bot lo indica explícitamente en vez de simular una lectura.
 
-**Nota sobre almacenamiento**: la foto o el audio en sí no se guardan de forma permanente —
-se descargan, se procesan, y se descartan. Solo el resultado (transcripción o datos
-extraídos) queda en `media_logs`. Ver `docs/architecture.md` §8 para el riesgo asociado.
+**Nota sobre almacenamiento (actualizado en Fase 4)**: el audio nunca se guarda de forma
+permanente — se descarga, se transcribe, y se descarta. La foto de un comprobante sí se puede
+guardar de forma permanente si `AWS_S3_BUCKET` (y credenciales) están configurados: en ese caso
+`media_service.process_image_message` sube el archivo a S3 (`app/integrations/storage/`) y
+guarda la URL en `media_logs.storage_url`, y el webhook agrega esa URL al mensaje que arma para
+el agente (`"[La foto quedó guardada en <url> — usa esta URL como comprobante_url al registrar
+el gasto.]"`), para que `crear_gasto` la deje registrada como comprobante. Si S3 no está
+configurado, el comportamiento es el mismo que antes de Fase 4: se procesa y se descarta,
+sin error — es una mejora opcional, no un requisito. Ver `docs/architecture.md` §7 y §8.
 
 ### Otros tipos de mensaje (documentos, videos, stickers, ubicación, contactos)
 

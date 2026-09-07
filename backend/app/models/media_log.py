@@ -22,9 +22,9 @@ class MediaLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     Conserva la transcripción o los datos extraídos (sección 8 y 5 del brief: "la
     transcripción debe conservarse opcionalmente para auditoría"). ``wa_media_id`` es la
-    referencia de Meta — los archivos en sí NO se almacenan de forma permanente porque no hay
-    todavía un proveedor de almacenamiento de archivos configurado (ver
-    docs/architecture.md, integración de almacenamiento pendiente para Fase 3+).
+    referencia de Meta. ``storage_url`` queda con la URL permanente (S3) solo si hay un
+    ``FileStorageProvider`` configurado (Fase 4); si no, el archivo se procesó al vuelo y no
+    se guardó — ver docs/architecture.md.
     """
 
     __tablename__ = "media_logs"
@@ -37,4 +37,5 @@ class MediaLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     mime_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    storage_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -144,9 +144,10 @@ def test_media_service_process_image_logs_extraction(db_session, monkeypatch):
         lambda image_bytes, mime_type: ExtractedReceipt(proveedor="Repuestos Y", monto=15000),
     )
 
-    extracted = media_service.process_image_message(db_session, user=tecnico, wa_media_id="wamid.456")
+    result = media_service.process_image_message(db_session, user=tecnico, wa_media_id="wamid.456")
 
-    assert extracted.proveedor == "Repuestos Y"
+    assert result.extracted.proveedor == "Repuestos Y"
+    assert result.comprobante_url is None  # sin AWS_S3_BUCKET configurado, no se sube el archivo
     log = db_session.execute(select(MediaLog).where(MediaLog.wa_media_id == "wamid.456")).scalars().first()
     assert log is not None
     assert log.media_type == MediaType.IMAGE

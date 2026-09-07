@@ -151,7 +151,7 @@ def _resolve_image_message(db: Session, user, message: dict) -> str:
         raise _DirectReply("No pude leer esa imagen.")
 
     try:
-        extracted = media_service.process_image_message(db, user=user, wa_media_id=media_id)
+        result = media_service.process_image_message(db, user=user, wa_media_id=media_id)
         db.commit()
     except ReceiptExtractionNotConfiguredError:
         db.rollback()
@@ -167,15 +167,20 @@ def _resolve_image_message(db: Session, user, message: dict) -> str:
         logger.exception("Error extrayendo datos de comprobante de %s", user.telefono_whatsapp)
         raise _DirectReply("No pude leer ese comprobante. Cuéntame los datos por texto y lo registro.")
 
-    return _compose_receipt_message(caption, extracted)
+    return _compose_receipt_message(caption, result.extracted, result.comprobante_url)
 
 
-def _compose_receipt_message(caption: str, extracted: ExtractedReceipt) -> str:
+def _compose_receipt_message(caption: str, extracted: ExtractedReceipt, comprobante_url: str | None) -> str:
     datos = extracted.model_dump(exclude_none=True, exclude_defaults=True, exclude={"nota"})
     detalle = ", ".join(f"{k}={v}" for k, v in datos.items()) or "no se pudo leer ningún dato con certeza"
     partes = [f"[Comprobante recibido. Datos detectados automáticamente en la foto: {detalle}.]"]
     if extracted.nota:
         partes.append(f"[Nota de la lectura automática: {extracted.nota}]")
+    if comprobante_url:
+        partes.append(
+            f"[La foto quedó guardada en {comprobante_url} — usa esta URL como comprobante_url "
+            "al registrar el gasto.]"
+        )
     partes.append(
         caption
         or "Registra el gasto con estos datos; pregúntame si falta algo que no puedas leer de la foto (como la categoría)."

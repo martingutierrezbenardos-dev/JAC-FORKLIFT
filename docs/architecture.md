@@ -104,8 +104,10 @@ backend/app/
 │   ├── whatsapp/          # cliente REAL de WhatsApp Cloud API (Meta), incl. descarga de media
 │   ├── transcription/      # transcripción de audio REAL (OpenAI Whisper) — Fase 2
 │   ├── calendar/           # interfaz + implementación REAL (Google Calendar) — Fase 3
-│   ├── gps/                # interfaz abstracta (placeholder, sin proveedor aún)
-│   └── email/              # interfaz abstracta (placeholder Gmail/Outlook)
+│   ├── email/               # interfaz + implementación REAL (Gmail) — Fase 4
+│   ├── storage/             # interfaz + implementación REAL de almacenamiento (S3) — Fase 4
+│   ├── google_workspace.py  # credenciales compartidas por Calendar y Gmail (misma cuenta de servicio)
+│   └── gps/                # interfaz abstracta (sin proveedor concreto: no se conoce cuál usa la empresa)
 ├── ai/                    # cliente LLM desacoplado + loop del agente + extracción de comprobantes (visión)
 └── tools/                 # catálogo de herramientas + implementaciones (llaman a services)
 ```
@@ -125,11 +127,22 @@ backend/app/
 | Reportes avanzados (por trabajador/proveedor/cliente/máquina/sucursal, por período) | **Real** (Fase 3), en `report_service.py`. |
 | Exportación de reportes (CSV, Excel, PDF) | **Real** (Fase 3): CSV con la librería estándar, Excel con `openpyxl`, PDF con `reportlab`. Endpoint `/api/reports/gastos/export`. |
 | Dashboard web | **Real** (Fase 3): página `/dashboard` con indicadores clave y gráficos de barras simples (CSS, sin librería de gráficos). |
-| Google Calendar | **Real** (Fase 3), usa una cuenta de servicio de Google Workspace con delegación de dominio completo (`GoogleCalendarProvider`). Verifica disponibilidad antes de crear una reunión, tal como pide la sección 13 del brief. Requiere `GOOGLE_SERVICE_ACCOUNT_JSON` y que un administrador de Google Workspace haya autorizado esa cuenta de servicio — sin eso, `crear_reunion`/`consultar_calendario` fallan explícitamente en vez de simular una respuesta. No se pudo probar de punta a punta en este entorno de desarrollo por no contar con una cuenta de Google Workspace real; los tests usan un `CalendarProvider` de prueba inyectado (mismo patrón que WhatsApp/transcripción/visión). |
-| GPS, Email | **Solo interfaces abstractas** (`integrations/gps`, `integrations/email`). No hay implementación concreta porque no se conoce el proveedor de GPS ni está definido el flujo de envío de correo (Fase 4). Ningún código simula una respuesta real. |
-| Grúas | Aún no implementado (Fase 4) — no hay tablas ni tools todavía. |
-| Almacenamiento permanente de archivos (fotos de comprobantes, audios) | **No implementado**: los archivos de WhatsApp se procesan al vuelo (transcripción/extracción) y se descartan; solo el resultado (texto/JSON) queda en `media_logs` para auditoría. No hay proveedor de almacenamiento (S3/GCS) configurado — ver riesgo en la sección 8. |
-| Panel web | **Real**: login, dashboard, usuarios, gastos, tareas, servicios técnicos, clientes y máquinas, consumiendo la API REST real. |
+| Google Calendar | **Real** (Fase 3), usa una cuenta de servicio de Google Workspace con delegación de dominio completo (`GoogleCalendarProvider`). Verifica disponibilidad antes de crear una reunión, tal como pide la sección 13 del brief. Requiere `GOOGLE_SERVICE_ACCOUNT_JSON` y que un administrador de Google Workspace haya autorizado esa cuenta de servicio — sin eso, `crear_reunion`/`consultar_calendario` fallan explícitamente en vez de simular una respuesta. |
+| Correo (Gmail) | **Real** (Fase 4), `GmailEmailProvider` reutiliza la misma cuenta de servicio de Calendar con scopes de Gmail. `preparar_correo` solo crea un borrador; `enviar_correo` es siempre nivel 2 (nunca se envía sin confirmación explícita, sección 14 del brief). |
+| Almacenamiento permanente de archivos (fotos de comprobantes) | **Real** (Fase 4), `S3FileStorageProvider` (Amazon S3, boto3). Requiere `AWS_S3_BUCKET`; sin eso, la foto se procesa al vuelo y se descarta como en Fases 2/3, sin simular una URL. Los audios no se guardan permanentemente (solo su transcripción, ver sección 8 del brief). |
+| Grúas (`crane_contracts`, `crane_usage`) | **Real** (Fase 4): registro de horas usadas por WhatsApp, consulta de horas contratadas/disponibles, alerta al 85% de uso. Crear un contrato es una acción administrativa (endpoint REST), no una tool de IA. |
+| Vehículos (ficha) | **Real** (Fase 4): tabla `vehicles`, ficha consultable por WhatsApp y panel web. |
+| GPS | **Solo interfaz abstracta** (`integrations/gps`), sin cambios desde la Fase 1: sigue sin conocerse el proveedor que usa la empresa. Las tools de GPS (`consultar_ubicacion_vehiculo`, etc.) existen y resuelven el vehículo, pero siempre responden "GPS aún no está configurado" hasta que se implemente un `GpsProvider` concreto — nunca se simula una ubicación falsa. |
+| Panel web | **Real**: login, dashboard, usuarios, gastos, tareas, servicios técnicos, clientes, máquinas, vehículos y contratos de grúa, consumiendo la API REST real. |
+
+Ninguna integración externa de este proyecto se probó de punta a punta contra la cuenta real
+de la empresa (WhatsApp Business, Anthropic, OpenAI, Google Workspace, AWS) — todas requieren
+credenciales que no existen en este entorno de desarrollo. Lo que sí se verificó en cada caso:
+el código compila e importa correctamente, los tests cubren la lógica de negocio con dobles de
+prueba inyectados en el mismo punto donde iría el cliente real (mismo patrón en las ocho
+integraciones: WhatsApp, Anthropic, OpenAI, visión de Claude, Google Calendar, Gmail, S3 y
+GPS), y cuando la credencial falta, el sistema responde con un mensaje claro en vez de fallar
+en silencio o simular una respuesta.
 
 ## 8. Riesgos técnicos identificados
 
@@ -153,29 +166,39 @@ backend/app/
    terceros salvo los proveedores de IA (Anthropic, OpenAI para transcripción), que solo
    reciben el contenido estrictamente necesario para interpretar el mensaje o leer la imagen,
    nunca credenciales ni datos de otros sistemas).
-6. **Sin almacenamiento permanente de archivos**: las fotos de comprobantes y los audios de
-   WhatsApp se procesan al vuelo y no se guardan (ver tabla de la sección 7). Esto es
-   aceptable para el MVP de Fase 2 (lo que importa para el negocio — el gasto, sus datos — sí
-   queda registrado), pero significa que si la extracción automática se equivoca, no hay
-   forma de volver a mirar la imagen original. Antes de depender de esto en producción con
-   volumen real, conviene agregar un `FileStorageProvider` (S3/GCS) — la interfaz de
-   `media_logs` ya está pensada para poder agregarle una URL de almacenamiento después.
+6. **Almacenamiento de archivos parcial**: con `AWS_S3_BUCKET` configurado, las fotos de
+   comprobantes quedan guardadas permanentemente (`expenses` puede llevar una
+   `comprobante_url` real). Los **audios no se guardan** — solo su transcripción — porque el
+   brief solo exige conservar la transcripción para auditoría (sección 8), no el archivo de
+   voz en sí. Sin `AWS_S3_BUCKET`, las fotos se procesan al vuelo y se descartan, igual que en
+   Fases 2/3.
 7. **Costo de la extracción de comprobantes**: cada foto de boleta implica una llamada a
    Claude con imagen (más cara que una llamada de solo texto). Aceptable en el volumen de un
    equipo técnico pequeño; monitorear costos si el volumen de fotos crece mucho.
-8. **Google Calendar sin probar contra un Workspace real**: la integración es código real
-   (no un mock), pero este entorno de desarrollo no tiene una cuenta de servicio de Google
-   Workspace real para probarla de punta a punta. Antes de usarla en producción: (a) crear un
-   proyecto en Google Cloud, (b) crear una cuenta de servicio con el scope
-   `https://www.googleapis.com/auth/calendar`, (c) un administrador de Workspace debe
-   autorizar esa cuenta de servicio para delegación de dominio completo, (d) cargar el JSON
-   de credenciales en `GOOGLE_SERVICE_ACCOUNT_JSON`. Sin esto, las tools de calendario
-   responden con un error claro en vez de simular disponibilidad o crear un evento falso.
+8. **Integraciones de Google (Calendar y Gmail) sin probar contra un Workspace real**: ambas
+   son código real (no un mock), pero este entorno de desarrollo no tiene una cuenta de
+   servicio de Google Workspace real para probarlas de punta a punta. Antes de usarlas en
+   producción: (a) crear un proyecto en Google Cloud, (b) crear una cuenta de servicio con los
+   scopes de Calendar (`.../auth/calendar`) y Gmail (`.../auth/gmail.compose`,
+   `.../auth/gmail.send`, `.../auth/gmail.readonly`), (c) un administrador de Workspace debe
+   autorizar esa cuenta de servicio para delegación de dominio completo, (d) cargar el JSON de
+   credenciales en `GOOGLE_SERVICE_ACCOUNT_JSON`. Sin esto, las tools correspondientes
+   responden con un error claro en vez de simular disponibilidad, un evento o un correo falso.
 9. **No hay recordatorios automáticos de mantenimiento por WhatsApp todavía**: la Fase 3
    agrega la *detección* de mantenimiento atrasado/próximo (tool, endpoint, dashboard), pero
    no un job programado que le escriba proactivamente al responsable — eso requeriría además
    una plantilla de WhatsApp aprobada por Meta (ver riesgo 1). Queda como trabajo futuro
    conectar la detección ya construida a un cron + `WhatsAppClient.send_template()`.
+10. **GPS sigue sin proveedor definido**: las tools de vehículos (`consultar_ubicacion_vehiculo`,
+    `consultar_kilometraje_vehiculo`, `consultar_viajes_vehiculo`) existen y resuelven el
+    vehículo por patente, pero `_get_gps_provider()` en `app/services/gps_service.py` lanza
+    `GpsNotConfiguredError` a propósito — es el único punto que hay que tocar cuando la
+    empresa defina su proveedor real (Wialon, Geotab, uno propio). No implementar un
+    proveedor concreto sin saber cuál usa la empresa es una decisión, no un olvido.
+11. **Envío de correo real**: `enviar_correo` es siempre nivel 2 en el agente (nunca se envía
+    sin confirmación explícita), pero una vez confirmado, el envío es real e irreversible —
+    no hay "deshacer" un correo ya enviado por Gmail. Cualquier ampliación futura de esta
+    tool debe mantener esa confirmación obligatoria.
 
 ## 9. Plan de fases (resumen)
 
@@ -184,10 +207,13 @@ backend/app/
   gastos, tareas, panel web mínimo.
 - **Fase 2**: audio + transcripción (OpenAI Whisper), OCR de comprobantes (visión de Claude),
   servicios técnicos (`service_orders`), clientes, máquinas.
-- **Fase 3 (implementada en este commit)**: mantenimiento preventivo + alertas, reportes
-  avanzados (por trabajador/proveedor/cliente/máquina/sucursal, por período), exportación
-  CSV/Excel/PDF, dashboard web, Google Calendar.
-- **Fase 4**: correo electrónico, GPS, camionetas, grúas, almacenamiento permanente de
-  archivos (S3/GCS), recordatorios proactivos de mantenimiento vía plantillas de WhatsApp.
+- **Fase 3**: mantenimiento preventivo + alertas, reportes avanzados
+  (por trabajador/proveedor/cliente/máquina/sucursal, por período), exportación CSV/Excel/PDF,
+  dashboard web, Google Calendar.
+- **Fase 4 (implementada en este commit)**: correo electrónico real (Gmail), grúas
+  (contratos, uso, alerta de horas), vehículos (ficha) y almacenamiento permanente de
+  comprobantes (S3). GPS queda con la misma interfaz abstracta de la Fase 1 — sigue sin
+  implementarse un proveedor concreto porque no se conoce cuál usa la empresa. Recordatorios
+  proactivos de mantenimiento vía plantillas de WhatsApp: no implementado (ver riesgo 9).
 - **Fase 5**: inteligencia empresarial (consultas analíticas agregadas, comparativas
   mensuales, resúmenes ejecutivos) — siempre basada en datos reales y trazable a registros.

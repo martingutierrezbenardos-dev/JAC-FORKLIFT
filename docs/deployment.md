@@ -78,3 +78,18 @@ Ver README.md para el comando exacto y las variables necesarias.
       simplemente responden que el calendario no está configurado — no bloquea el resto del
       sistema.
 - [ ] Si se va a usar transcripción de audio: `OPENAI_API_KEY` configurada.
+- [ ] Si se va a usar correo (Fase 4): el mismo `GOOGLE_SERVICE_ACCOUNT_JSON` de Calendar sirve
+      para Gmail, pero la cuenta de servicio debe tener autorizados también los scopes de Gmail
+      (`gmail.readonly`, `gmail.compose`, `gmail.send`) en la delegación de dominio del admin de
+      Workspace — no alcanza con haber autorizado solo los scopes de Calendar. Sin esto,
+      `preparar_correo`/`enviar_correo`/`buscar_correos` responden que el correo no está
+      configurado.
+- [ ] Si se va a guardar fotos de comprobantes de forma permanente (Fase 4): bucket S3 creado
+      (`AWS_S3_BUCKET`), región (`AWS_REGION`) y credenciales con permiso `s3:PutObject` sobre
+      ese bucket (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, o un rol IAM si se despliega en
+      AWS). Es opcional: sin esto, las fotos se siguen procesando y extrayendo igual, solo que
+      no queda la imagen guardada (ver `docs/whatsapp.md`).
+- [ ] Si se va a usar GPS de vehículos (Fase 4): no hay checklist todavía — el proveedor GPS de
+      la empresa aún no está definido. `app/services/gps_service.py` documenta el único punto a
+      implementar cuando se elija un proveedor; hasta entonces las tools de ubicación/kilometraje
+      responden que el GPS no está configurado, en vez de simular datos.

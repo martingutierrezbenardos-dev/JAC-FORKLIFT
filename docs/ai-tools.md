@@ -74,6 +74,15 @@ Definidas en `app/tools/registry.py`, implementadas en `app/tools/*_tools.py`.
 | `buscar_mantenimiento_pendiente` (Fase 3) | 1 | `MAINTENANCE_READ` | Lista máquinas con mantenimiento atrasado o próximo a vencer (por fecha o por horómetro). |
 | `crear_reunion` (Fase 3) | 1 si no hay más participantes; 2 si hay otros participantes | `CALENDAR_USE` | Crea una reunión en Google Calendar, verificando disponibilidad de todos los asistentes antes de agendar. |
 | `consultar_calendario` (Fase 3) | 1 | `CALENDAR_USE` | Consulta si quien escribe está disponible en un rango de fecha/hora. |
+| `preparar_correo` (Fase 4) | 1 | `EMAIL_USE` | Prepara (crea) un borrador de correo en Gmail para uno o más destinatarios (por email o por teléfono, resuelto a su email registrado). No lo envía. |
+| `enviar_correo` (Fase 4) | 2 (fijo, no depende del input) | `EMAIL_USE` | Envía un borrador ya creado con `preparar_correo`. Siempre nivel 2: nunca se envía un correo externo sin confirmación explícita (sección 14 del brief), sin excepción. |
+| `buscar_correos` (Fase 4) | 1 | `EMAIL_USE` | Busca correos en la casilla de quien escribe (Gmail) por texto/remitente/asunto. |
+| `buscar_vehiculo` (Fase 4) | 1 | `VEHICLES_READ` | Ficha de un vehículo de la empresa por patente (marca, modelo, año, sucursal, conductor asignado, estado). |
+| `consultar_ubicacion_vehiculo` (Fase 4) | 1 | `VEHICLES_READ` | Consulta la ubicación GPS actual de un vehículo. Requiere un proveedor GPS configurado (ver `architecture.md`, sección de integraciones); sin uno, responde con un error claro en vez de simular datos. |
+| `consultar_kilometraje_vehiculo` (Fase 4) | 1 | `VEHICLES_READ` | Consulta el kilometraje/horómetro reportado por el proveedor GPS del vehículo. |
+| `consultar_viajes_vehiculo` (Fase 4) | 1 | `VEHICLES_READ` | Consulta el historial de viajes de un vehículo en un rango de fechas, vía el proveedor GPS. |
+| `registrar_uso_grua` (Fase 4) | 1 | `CRANES_REGISTER` | Registra horas de uso de grúa contra el contrato activo de un cliente, y devuelve el saldo de horas disponibles y si el contrato está por agotarse (≥85% usado). |
+| `consultar_horas_grua` (Fase 4) | 1 | `CRANES_READ` (con `cliente_nombre`) o `CRANES_MANAGE` (sin filtro, lista todos los contratos activos) | Consulta el saldo de horas de uno o todos los contratos de grúa activos. |
 
 Cada tool declara su `input_schema` con Pydantic, que se traduce a JSON Schema para el LLM
 (`model.dump_json_schema()`), así el contrato de datos es el mismo en la API REST y en la
@@ -93,15 +102,13 @@ tenga uno — si no, rechaza la operación explicando a quién le falta, en vez 
 medias. Antes de crear el evento, siempre verifica disponibilidad de todos los asistentes
 (sección 13 del brief); si alguien tiene un conflicto, no agenda y lo informa.
 
-## Herramientas planificadas para fases futuras (documentadas, no implementadas)
+## Herramientas registradas en el diseño pero fuera del catálogo del agente
 
-Se listan explícitamente para que quede claro que existen en el diseño pero no en código
-todavía (nada de esto está "simulado" en el agente):
-
-- `preparar_correo`, `enviar_correo` (Fase 4, `enviar_correo` siempre nivel 2: se prepara un
-  borrador y se pide confirmación explícita antes de enviar, tal como pide la sección 14)
-- `consultar_gps_vehiculo`, `consultar_horas_grua` (Fase 4, dependen de proveedores externos
-  aún no definidos)
+La creación de contratos de grúa (`CraneContractCreate` / `POST /api/crane-contracts`) es
+deliberadamente **solo REST**, no una tool de IA: abrir un contrato es una decisión
+comercial/contable (define precio por hora, período, cliente) que corresponde al panel web con
+el rol adecuado, no a una conversación de WhatsApp. El agente solo puede *registrar uso* contra
+un contrato ya existente (`registrar_uso_grua`) y *consultar* su estado (`consultar_horas_grua`).
 
 ## Personalidad (system prompt)
 

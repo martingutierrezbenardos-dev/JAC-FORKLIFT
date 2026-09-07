@@ -12,10 +12,12 @@ from datetime import date, timedelta
 from app.core.permissions import UserRole
 from app.core.security import hash_password
 from app.db.session import SessionLocal
+from app.models.crane import CraneContract, CraneUsage
 from app.models.customer import Customer
 from app.models.machine import Machine
 from app.models.maintenance_record import MaintenanceRecord, MaintenanceType
 from app.models.user import User
+from app.models.vehicle import Vehicle
 
 
 def seed() -> None:
@@ -113,10 +115,42 @@ def seed() -> None:
             )
         )
 
+        vehiculo_1 = Vehicle(
+            patente="ABCD12", marca="Toyota", modelo="Hilux", anio=2022, sucursal="Santiago",
+            conductor_asignado_id=juan.id, estado="operativo",
+        )
+        vehiculo_2 = Vehicle(
+            patente="EFGH34", marca="Nissan", modelo="Navara", anio=2021, sucursal="Antofagasta",
+            conductor_asignado_id=cristian.id, estado="operativo",
+        )
+        db.add_all([vehiculo_1, vehiculo_2])
+
+        # Contrato de grúa de Cliente A: cerca del límite (90 de 100 horas), para probar la alerta.
+        contrato_a = CraneContract(
+            cliente_id=cliente_a.id, periodo_inicio=hoy.replace(day=1), periodo_fin=hoy + timedelta(days=30),
+            horas_contratadas=100, costo_hora=45000,
+        )
+        # Contrato de grúa de Cliente B: uso bajo, sin alerta.
+        contrato_b = CraneContract(
+            cliente_id=cliente_b.id, periodo_inicio=hoy.replace(day=1), periodo_fin=hoy + timedelta(days=30),
+            horas_contratadas=80, costo_hora=45000,
+        )
+        db.add_all([contrato_a, contrato_b])
+        db.flush()
+
+        db.add_all(
+            [
+                CraneUsage(contrato_id=contrato_a.id, registrado_por=juan.id, fecha=hoy, horas_usadas=60),
+                CraneUsage(contrato_id=contrato_a.id, registrado_por=juan.id, fecha=hoy, horas_usadas=30),
+                CraneUsage(contrato_id=contrato_b.id, registrado_por=cristian.id, fecha=hoy, horas_usadas=12),
+            ]
+        )
+
         db.commit()
         print(
             "Datos de desarrollo creados: 4 usuarios, 3 clientes, 3 máquinas "
-            "(2 con mantenimiento pendiente, para probar las alertas)."
+            "(2 con mantenimiento pendiente), 2 vehículos, 2 contratos de grúa "
+            "(1 cerca del límite, para probar las alertas)."
         )
     finally:
         db.close()

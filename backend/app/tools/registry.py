@@ -18,16 +18,21 @@ from app.core.permissions import Permission, UserRole, has_permission
 from app.models.service_order import ServiceOrderStatus
 from app.models.user import User
 from app.schemas.calendar import ConsultarCalendarioInput, CrearReunionInput
+from app.schemas.crane import ConsultarHorasGruaInput, RegistrarUsoGruaInput
 from app.schemas.customer import BuscarClienteInput
+from app.schemas.email import BuscarCorreosInput, EnviarCorreoInput, PrepararCorreoInput
 from app.schemas.expense import ExpenseCreate, ExpenseSearchParams, ExpenseUpdateToolInput
 from app.schemas.machine import BuscarMaquinaInput
 from app.schemas.maintenance import MaintenanceAlertParams, MaintenanceCreate, MaintenanceSearchParams
 from app.schemas.service_order import ServiceOrderCreate, ServiceOrderSearchParams, ServiceOrderUpdate
 from app.schemas.task import CompletarTareaInput, TaskCreate, TaskSearchParams
 from app.schemas.user import BuscarUsuarioInput
+from app.schemas.vehicle import BuscarVehiculoInput, ConsultarRangoVehiculoInput, ConsultarUbicacionVehiculoInput
 from app.tools import (
     calendar_tools,
+    crane_tools,
     customer_tools,
+    email_tools,
     expense_tools,
     machine_tools,
     maintenance_tools,
@@ -35,6 +40,7 @@ from app.tools import (
     service_tools,
     task_tools,
     user_tools,
+    vehicle_tools,
 )
 
 ConfirmationLevelFn = Callable[[BaseModel, User], int]
@@ -105,7 +111,9 @@ REGISTRY: dict[str, ToolDefinition] = {
         description=(
             "Registra un gasto para la persona que escribe (nunca para otra persona). Usa "
             "esto cuando alguien mencione haber comprado algo, pagado algo, o incurrido en "
-            "un costo relacionado con el trabajo."
+            "un costo relacionado con el trabajo. Si el contexto incluye una URL de "
+            "comprobante ya guardada (mensaje del tipo '[La foto quedó guardada en ...]'), "
+            "pásala en comprobante_url."
         ),
         input_model=ExpenseCreate,
         handler=expense_tools.crear_gasto,
@@ -279,6 +287,87 @@ REGISTRY: dict[str, ToolDefinition] = {
         input_model=ConsultarCalendarioInput,
         handler=calendar_tools.consultar_calendario,
         required_permission=Permission.CALENDAR_USE,
+        confirmation_level=1,
+    ),
+    "preparar_correo": ToolDefinition(
+        name="preparar_correo",
+        description=(
+            "Prepara un borrador de correo (Gmail) con destinatarios, asunto y cuerpo. NO lo "
+            "envía — solo lo deja listo. Usa 'enviar_correo' después, con confirmación "
+            "explícita del usuario, para enviarlo de verdad."
+        ),
+        input_model=PrepararCorreoInput,
+        handler=email_tools.preparar_correo,
+        required_permission=Permission.EMAIL_USE,
+        confirmation_level=1,
+    ),
+    "enviar_correo": ToolDefinition(
+        name="enviar_correo",
+        description="Envía un borrador de correo previamente preparado con 'preparar_correo'.",
+        input_model=EnviarCorreoInput,
+        handler=email_tools.enviar_correo,
+        required_permission=Permission.EMAIL_USE,
+        # Siempre nivel 2: nunca se envía un correo externo sin confirmación explícita
+        # (sección 14 del brief), sin excepción — no depende del input.
+        confirmation_level=2,
+    ),
+    "buscar_correos": ToolDefinition(
+        name="buscar_correos",
+        description="Busca correos en la bandeja de Gmail de quien escribe.",
+        input_model=BuscarCorreosInput,
+        handler=email_tools.buscar_correos,
+        required_permission=Permission.EMAIL_USE,
+        confirmation_level=1,
+    ),
+    "buscar_vehiculo": ToolDefinition(
+        name="buscar_vehiculo",
+        description="Busca la ficha de un vehículo/camioneta de la flota por patente.",
+        input_model=BuscarVehiculoInput,
+        handler=vehicle_tools.buscar_vehiculo,
+        required_permission=Permission.VEHICLES_READ,
+        confirmation_level=1,
+    ),
+    "consultar_ubicacion_vehiculo": ToolDefinition(
+        name="consultar_ubicacion_vehiculo",
+        description="Consulta la ubicación actual de un vehículo por GPS (ej. '¿dónde está la camioneta 4?').",
+        input_model=ConsultarUbicacionVehiculoInput,
+        handler=vehicle_tools.consultar_ubicacion_vehiculo,
+        required_permission=Permission.VEHICLES_READ,
+        confirmation_level=1,
+    ),
+    "consultar_kilometraje_vehiculo": ToolDefinition(
+        name="consultar_kilometraje_vehiculo",
+        description="Consulta los kilómetros recorridos por un vehículo en un rango de fechas (vía GPS).",
+        input_model=ConsultarRangoVehiculoInput,
+        handler=vehicle_tools.consultar_kilometraje_vehiculo,
+        required_permission=Permission.VEHICLES_READ,
+        confirmation_level=1,
+    ),
+    "consultar_viajes_vehiculo": ToolDefinition(
+        name="consultar_viajes_vehiculo",
+        description="Lista los viajes de un vehículo en un rango de fechas (vía GPS).",
+        input_model=ConsultarRangoVehiculoInput,
+        handler=vehicle_tools.consultar_viajes_vehiculo,
+        required_permission=Permission.VEHICLES_READ,
+        confirmation_level=1,
+    ),
+    "registrar_uso_grua": ToolDefinition(
+        name="registrar_uso_grua",
+        description="Registra horas de uso de grúa contra el contrato activo de un cliente.",
+        input_model=RegistrarUsoGruaInput,
+        handler=crane_tools.registrar_uso_grua,
+        required_permission=Permission.CRANES_REGISTER,
+        confirmation_level=1,
+    ),
+    "consultar_horas_grua": ToolDefinition(
+        name="consultar_horas_grua",
+        description=(
+            "Consulta horas contratadas/usadas/disponibles de grúa para un cliente. Sin "
+            "indicar cliente, lista todos los contratos activos (requiere permiso de gestión)."
+        ),
+        input_model=ConsultarHorasGruaInput,
+        handler=crane_tools.consultar_horas_grua,
+        required_permission=Permission.CRANES_READ,
         confirmation_level=1,
     ),
 }

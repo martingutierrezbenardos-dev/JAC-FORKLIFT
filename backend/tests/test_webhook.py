@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.permissions import UserRole
 from app.integrations.transcription.provider import TranscriptionNotConfiguredError
 from app.integrations.whatsapp.client import WhatsAppClient
+from app.services.media_service import ImageProcessingResult
 from tests.conftest import make_user
 
 
@@ -166,7 +167,9 @@ def test_webhook_imagen_extrae_comprobante_y_pasa_al_agente(client, monkeypatch,
     monkeypatch.setattr(whatsapp_route, "AgentSession", _FakeAgent)
     monkeypatch.setattr(
         whatsapp_route.media_service, "process_image_message",
-        lambda db, user, wa_media_id: ExtractedReceipt(proveedor="Repuestos X", monto=85000),
+        lambda db, user, wa_media_id: ImageProcessingResult(
+            extracted=ExtractedReceipt(proveedor="Repuestos X", monto=85000), comprobante_url=None
+        ),
     )
     _FakeWhatsAppClient.sent.clear()
 

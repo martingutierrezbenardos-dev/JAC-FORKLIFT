@@ -13,28 +13,22 @@ se devuelve una disponibilidad o un evento simulado.
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime
 
-from app.core.config import get_settings
 from app.integrations.calendar.provider import CalendarEvent, CalendarNotConfiguredError, CalendarProvider
+from app.integrations.google_workspace import build_impersonated_credentials
 
 _SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
 class GoogleCalendarProvider(CalendarProvider):
     def __init__(self, *, impersonate_email: str, calendar_id: str = "primary") -> None:
-        settings = get_settings()
-        if not settings.google_service_account_json:
-            raise CalendarNotConfiguredError()
+        try:
+            credentials = build_impersonated_credentials(impersonate_email, _SCOPES)
+        except RuntimeError as exc:
+            raise CalendarNotConfiguredError() from exc
 
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
-
-        info = json.loads(settings.google_service_account_json)
-        credentials = service_account.Credentials.from_service_account_info(
-            info, scopes=_SCOPES
-        ).with_subject(impersonate_email)
 
         self._service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
         self._calendar_id = calendar_id

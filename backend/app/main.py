@@ -7,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import (
     auth,
+    cranes,
     customers,
     expenses,
     machines,
@@ -14,6 +15,7 @@ from app.api.routes import (
     service_orders,
     tasks,
     users,
+    vehicles,
     whatsapp,
 )
 from app.core.config import get_settings
@@ -45,6 +47,8 @@ app.include_router(reports.router)
 app.include_router(customers.router)
 app.include_router(machines.router)
 app.include_router(service_orders.router)
+app.include_router(vehicles.router)
+app.include_router(cranes.router)
 app.include_router(whatsapp.router)
 
 

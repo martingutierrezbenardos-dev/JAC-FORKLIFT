@@ -167,6 +167,7 @@ guarda de forma permanente — ver `architecture.md` §7 y §8 (riesgo de almace
 | mime_type | str, nullable | |
 | transcript | text, nullable | resultado de transcripción (audio) |
 | extracted_data | JSONB, nullable | resultado de extracción (imagen/comprobante) |
+| storage_url | str, nullable | Fase 4: URL permanente en S3, solo si `AWS_S3_BUCKET` está configurado |
 | error | text, nullable | si el procesamiento falló |
 
 ### `maintenance_records` — Fase 3
@@ -188,11 +189,55 @@ Cada registro nuevo actualiza automáticamente los campos de mantenimiento de la
 asociada (ver `app/services/maintenance_service.py`) — la ficha de la máquina y las alertas
 nunca tienen que recalcular sobre el historial completo.
 
+### `vehicles` — Fase 4
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| patente | str, único | |
+| marca, modelo | str, nullable | |
+| anio | int, nullable | |
+| sucursal | str, nullable | |
+| conductor_asignado_id | FK users, nullable | |
+| estado | str | default `operativo` |
+| observaciones | str, nullable | |
+
+No incluye ubicación ni kilometraje en vivo — eso depende de un `GpsProvider` concreto que
+todavía no existe (ver `docs/architecture.md`, riesgo 10). La ficha del vehículo es
+independiente del proveedor de GPS que se elija después.
+
+### `crane_contracts` — Fase 4
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| cliente_id | FK customers | |
+| periodo_inicio, periodo_fin | date | vigencia del contrato |
+| horas_contratadas | numeric(8,2) | |
+| costo_hora | numeric(12,2) | |
+| moneda | enum (`CLP`, `USD`) | default `CLP` |
+| estado | enum `CraneContractStatus` | activo, finalizado, cancelado |
+| observaciones | text, nullable | |
+
+### `crane_usage` — Fase 4
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| contrato_id | FK crane_contracts | |
+| registrado_por | FK users | |
+| servicio_id | FK service_orders, nullable | si el uso de grúa está asociado a una visita registrada |
+| fecha | date | |
+| horas_usadas | numeric(8,2) | |
+| observaciones | text, nullable | |
+
+Las horas utilizadas/disponibles y el porcentaje de uso (con alerta al 85%, sección 16 del
+brief) se calculan en `app/services/crane_service.py` sumando `crane_usage` contra el
+contrato — no se guarda un total redundante en `crane_contracts`.
+
 ## Entidades aún no creadas (fases futuras)
 
-Sus reglas de negocio no están definidas con suficiente detalle todavía: `vehicles`,
-`gps_events`, `crane_contracts`, `crane_usage` (Fase 4), `attachments` como tabla genérica de
-almacenamiento permanente de archivos (Fase 4, junto con un `FileStorageProvider` real).
+Sus reglas de negocio no están definidas con suficiente detalle todavía: `gps_events`
+(depende de un proveedor de GPS aún no elegido) y `attachments` como tabla genérica de
+almacenamiento (en Fase 4 se resolvió el caso concreto que hacía falta — comprobantes de
+gastos — agregando `media_logs.storage_url` en vez de una tabla genérica nueva).
 
 ## Diagrama de relaciones
 
@@ -210,7 +255,10 @@ users ──< expenses >── customers
   ├──< conversation_messages
   ├──< media_logs
   ├──< maintenance_records (tecnico_id)
-  └──< audit_logs
+  ├──< vehicles (conductor_asignado_id)
+  ├──< crane_usage (registrado_por)
+  ├──< audit_logs
+  └──customers ──< crane_contracts ──< crane_usage >── service_orders
 ```
 
 ## Migraciones
@@ -223,6 +271,14 @@ Alembic vive en `backend/alembic/`. Migraciones aplicadas:
   `service_order_number_seq` para el número de OT), `media_logs` (Fase 2).
 - `0003_fase3_mantenimiento.py`: `maintenance_records` y los campos de mantenimiento de
   `machines` (Fase 3).
+- `0004_fase4_vehiculos_gruas.py`: `vehicles`, `crane_contracts`, `crane_usage`, y
+  `media_logs.storage_url` (Fase 4).
+
+Nota técnica: al reutilizar un tipo `ENUM` de Postgres ya creado en una migración anterior
+(ej. `currency` en `crane_contracts.moneda`), hay que declararlo con
+`postgresql.ENUM(..., create_type=False)` en vez del `sa.Enum(...)` que genera
+`--autogenerate` por defecto — si no, la migración intenta crear el tipo de nuevo y falla con
+`DuplicateObject`. Ver `0004_fase4_vehiculos_gruas.py` para el patrón exacto.
 
 Para generar nuevas migraciones tras modificar un modelo:
 
@@ -237,6 +293,7 @@ alembic upgrade head
 `backend/app/db/seed.py` crea usuarios, clientes y máquinas ficticias de desarrollo (Juan y
 Cristian técnicos, Marcela administración, Pedro gerente general; Cliente A/B/C; Máquinas
 33/42/51, dos de ellas asociadas a un cliente para poder probar las relaciones). Las máquinas
-33 y 42 quedan con mantenimiento pendiente (una atrasada por fecha, otra por horómetro) para
-poder ver las alertas funcionando de inmediato en el dashboard. Nunca usa datos reales de la
+33 y 42 quedan con mantenimiento pendiente (una atrasada por fecha, otra por horómetro), y
+además se crean 2 vehículos y 2 contratos de grúa (uno de ellos al 90% de uso) para poder ver
+todas las alertas funcionando de inmediato en el dashboard. Nunca usa datos reales de la
 empresa.

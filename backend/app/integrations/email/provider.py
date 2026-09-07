@@ -1,8 +1,9 @@
-"""Interfaz abstracta para integración de correo (sección 14 del brief, Fase 4).
+"""Interfaz abstracta para integración de correo (sección 14 del brief).
 
-No implementado en Fase 1. Por diseño de seguridad, ``send_email`` de cualquier implementación
-concreta futura debe ser siempre una acción de nivel 2 (requiere confirmación explícita del
-usuario) — nunca se debe enviar un correo externo sin que la persona lo confirme.
+Implementación real en ``app/integrations/email/gmail_provider.py`` (Fase 4). Por diseño de
+seguridad, "enviar" es siempre una acción de nivel 2 en el agente de IA (requiere confirmación
+explícita del usuario) — nunca se debe enviar un correo externo sin que la persona lo confirme
+(ver ``app/tools/registry.py::REGISTRY["enviar_correo"]``).
 """
 from __future__ import annotations
 

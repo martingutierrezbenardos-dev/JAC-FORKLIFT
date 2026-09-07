@@ -2,6 +2,7 @@
 from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.conversation_message import ConversationMessage, MessageRole
+from app.models.crane import CraneContract, CraneContractStatus, CraneUsage
 from app.models.customer import Customer
 from app.models.expense import Currency, Expense, ExpenseCategory, PaymentMethod, ReimbursementStatus
 from app.models.machine import Machine
@@ -11,6 +12,7 @@ from app.models.pending_action import PendingAction, PendingActionStatus
 from app.models.service_order import ServiceOrder, ServiceOrderStatus
 from app.models.task import Task, TaskPriority, TaskStatus
 from app.models.user import User
+from app.models.vehicle import Vehicle
 
 __all__ = [
     "Base",
@@ -36,4 +38,8 @@ __all__ = [
     "MediaType",
     "MaintenanceRecord",
     "MaintenanceType",
+    "Vehicle",
+    "CraneContract",
+    "CraneContractStatus",
+    "CraneUsage",
 ]
