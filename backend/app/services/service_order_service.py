@@ -126,7 +126,10 @@ def update_service_order(
 
     audit_service.record(
         db, usuario_id=actor.id, accion="update", entidad="service_orders", entidad_id=order.id,
-        datos_nuevos=update_fields, canal=canal,
+        datos_nuevos=data.model_dump(
+            exclude={"servicio_numero", "cliente_nombre", "maquina_numero"}, exclude_unset=True, mode="json"
+        ),
+        canal=canal,
     )
     return order
 

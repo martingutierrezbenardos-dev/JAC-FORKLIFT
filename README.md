@@ -8,7 +8,7 @@ formularios.
 Este README está escrito para que lo pueda seguir alguien que no programa. Si algo no queda
 claro, revisa `docs/` (hay un documento por tema) antes de tocar código.
 
-## 1. ¿Qué hace el sistema hoy (Fase 1 + Fase 2)?
+## 1. ¿Qué hace el sistema hoy (Fases 1 a 3)?
 
 - Un trabajador registrado le escribe por WhatsApp cosas como *"Compré un rodamiento en
   Repuestos X, 85 lucas, plata mía"* y el sistema registra automáticamente el gasto.
@@ -18,15 +18,22 @@ claro, revisa `docs/` (hay un documento por tema) antes de tocar código.
   donde el cliente ABC"*, *"Estoy atendiendo la máquina 33"*, *"Terminé, era el alternador"* —
   cada mensaje actualiza la misma orden de servicio sin que el técnico tenga que dar un
   número o llenar un formulario.
-- Se puede preguntar *"¿Cuánto he gastado este mes?"*, *"¿Qué tareas tengo pendientes?"* o
-  *"¿Qué sabes de la máquina 33?"* y el sistema responde con datos reales de la base de datos
-  (nunca inventados).
+- También puede registrar un mantenimiento (*"Le cambié el aceite a la 33"*) y el sistema
+  calcula automáticamente cuándo corresponde el próximo, avisando en el dashboard cuando una
+  máquina queda atrasada.
+- Se puede preguntar *"¿Cuánto he gastado este mes?"*, *"¿Qué tareas tengo pendientes?"*,
+  *"¿Qué sabes de la máquina 33?"* o *"¿Qué máquinas tienen mantenimiento pendiente?"* y el
+  sistema responde con datos reales de la base de datos (nunca inventados).
+- Se puede pedir un reporte por período (día/semana/mes) y descargarlo en CSV, Excel o PDF.
+- Se puede agendar una reunión (*"agenda una reunión con Cristian mañana a las 10"*): el
+  sistema verifica disponibilidad en Google Calendar antes de agendar y pide confirmación.
 - Cada rol (técnico, vendedor, administración, gerencia, etc.) ve solo la información que le
   corresponde — un técnico no puede ver el gasto total de la empresa, por ejemplo.
 - Acciones sensibles (modificar un gasto, asignarle una tarea a otra persona, cerrar una
-  orden de servicio) piden confirmación explícita antes de ejecutarse.
-- Hay un panel web mínimo para ver usuarios, gastos, tareas, servicios técnicos, clientes y
-  máquinas desde el navegador.
+  orden de servicio, agendar una reunión con terceros) piden confirmación explícita antes de
+  ejecutarse.
+- Hay un panel web con un dashboard de indicadores y listados de usuarios, gastos, tareas,
+  servicios técnicos, clientes y máquinas.
 
 Lo que **todavía no existe** (y por qué) está documentado en
 `docs/architecture.md` (sección "Qué es real y qué es placeholder").
@@ -65,7 +72,7 @@ JAC-FORKLIFT/
 │   │   └── tools/                catálogo de herramientas del agente
 │   ├── alembic/                  migraciones de base de datos
 │   └── tests/                    pruebas automatizadas (pytest)
-├── frontend/            Next.js (TypeScript) — panel web mínimo
+├── frontend/            Next.js (TypeScript) — panel web (dashboard + módulos)
 ├── docs/                 documentación detallada por tema
 ├── docker-compose.yml
 ├── .env.example
@@ -79,6 +86,8 @@ JAC-FORKLIFT/
 - PostgreSQL 16 (local o vía Docker)
 - Una cuenta de Anthropic con una API key (para el agente de IA y la lectura de comprobantes)
 - Una cuenta de OpenAI con una API key (opcional, solo para transcribir audios — Fase 2)
+- Una cuenta de servicio de Google Workspace (opcional, solo para crear/consultar reuniones
+  en Google Calendar — Fase 3; ver `docs/architecture.md` riesgo 8)
 - Una cuenta de Meta Business con WhatsApp Cloud API configurada (para producción real; no
   es necesaria para desarrollar o correr los tests)
 
@@ -204,7 +213,7 @@ usuarios/roles/permisos, gastos (crear/consultar/modificar/reportar), tareas
 (crear/consultar/completar), base de datos PostgreSQL con migraciones, panel web mínimo,
 tests automatizados.
 
-**Fase 2 — completada en este commit:**
+**Fase 2 — completada:**
 - Audio: transcripción real con la API de Whisper de OpenAI.
 - Fotos de comprobantes: extracción real de datos (proveedor, monto, fecha, etc.) usando la
   visión de Claude — nunca inventa un dato que no esté en la imagen.
@@ -212,13 +221,22 @@ tests automatizados.
   término, diagnóstico y trabajo realizado en lenguaje natural, sin dar un número de orden.
 - Clientes y máquinas: fichas completas consultables por WhatsApp (`buscar_cliente`,
   `buscar_maquina`) y listados en el panel web.
-- 62 tests automatizados en total (25 nuevos de Fase 2).
+
+**Fase 3 — completada en este commit:**
+- Mantenimiento preventivo (`maintenance_records`): registro por WhatsApp, cálculo automático
+  de la próxima fecha/horómetro, y alertas de máquinas atrasadas o próximas a vencer.
+- Reportes avanzados: por trabajador, proveedor, cliente, máquina y sucursal; por día, semana
+  o mes; también para servicios técnicos (por técnico, tiempos promedio de atención/traslado).
+- Exportación de reportes de gastos a CSV, Excel y PDF (`/api/reports/gastos/export`).
+- Dashboard web con indicadores clave y gráficos de barras simples.
+- Google Calendar real (cuenta de servicio con delegación de dominio): verifica disponibilidad
+  antes de agendar una reunión, tal como pide el brief.
+- 87 tests automatizados en total (25 nuevos de Fase 3).
 
 **Pendiente (fases futuras, ver `docs/architecture.md` §9):**
-- Fase 3: mantenimiento preventivo + alertas, reportes avanzados (Excel/PDF), dashboard,
-  Google Calendar.
 - Fase 4: correo electrónico, GPS, camionetas, grúas, almacenamiento permanente de archivos
-  (S3/GCS) — hoy las fotos/audios de WhatsApp se procesan al vuelo y no se guardan.
+  (S3/GCS) — hoy las fotos/audios de WhatsApp se procesan al vuelo y no se guardan — y
+  recordatorios proactivos de mantenimiento por WhatsApp (requiere plantillas aprobadas por Meta).
 - Fase 5: inteligencia empresarial (comparativas, resúmenes ejecutivos basados en datos).
 
 No se implementó ninguna de estas para no simular integraciones que no existen todavía — ver

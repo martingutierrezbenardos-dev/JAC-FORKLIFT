@@ -25,15 +25,17 @@ Definida en `app/core/permissions.py`. Permisos (`Permission` enum):
 - `SERVICES_CREATE_OWN`, `SERVICES_READ_OWN`, `SERVICES_READ_ALL`, `SERVICES_UPDATE_OWN`,
   `SERVICES_UPDATE_ALL`, `SERVICES_ASSIGN`, `SERVICES_CLOSE` (Fase 2)
 - `CUSTOMERS_READ`, `MACHINES_READ` (Fase 2)
+- `MAINTENANCE_CREATE`, `MAINTENANCE_READ` (Fase 3)
+- `CALENDAR_USE` (Fase 3)
 
 | Rol | Permisos |
 |---|---|
-| `tecnico` | EXPENSES_CREATE_OWN, EXPENSES_READ_OWN, EXPENSES_UPDATE_OWN, TASKS_CREATE_OWN, TASKS_READ_OWN, TASKS_COMPLETE_OWN, REPORTS_VIEW_OWN, SERVICES_CREATE_OWN, SERVICES_READ_OWN, SERVICES_UPDATE_OWN, CUSTOMERS_READ, MACHINES_READ |
+| `tecnico` | EXPENSES_CREATE_OWN, EXPENSES_READ_OWN, EXPENSES_UPDATE_OWN, TASKS_CREATE_OWN, TASKS_READ_OWN, TASKS_COMPLETE_OWN, REPORTS_VIEW_OWN, SERVICES_CREATE_OWN, SERVICES_READ_OWN, SERVICES_UPDATE_OWN, CUSTOMERS_READ, MACHINES_READ, MAINTENANCE_CREATE, MAINTENANCE_READ, CALENDAR_USE |
 | `vendedor` | igual que técnico |
 | `administracion` | EXPENSES_READ_ALL, EXPENSES_UPDATE_ALL, EXPENSES_APPROVE_REIMBURSEMENT, TASKS_READ_ALL, TASKS_ASSIGN_OTHERS, TASKS_COMPLETE_ALL, USERS_READ_ALL, REPORTS_VIEW_ALL, SERVICES_READ_ALL, SERVICES_UPDATE_ALL, + permisos de técnico |
 | `jefe_servicios_tecnicos` | igual que administración (salvo EXPENSES_APPROVE_REIMBURSEMENT y USERS_READ_ALL) + SERVICES_ASSIGN, SERVICES_CLOSE |
 | `gerente_sucursal` | todos los de administración, alcance limitado a su sucursal (filtrado en `services/`) |
-| `gerente_marketing` | REPORTS_VIEW_OWN, TASKS_* propios (no financiero, sin acceso a gastos/servicios/clientes/máquinas) |
+| `gerente_marketing` | REPORTS_VIEW_OWN, TASKS_* propios (no financiero, sin acceso a gastos/servicios/clientes/máquinas/mantenimiento/calendario) |
 | `responsable_mercado_publico` | permisos de técnico + REPORTS_VIEW_OWN |
 | `gerente_general` | todos los permisos, sin restricción de sucursal |
 | `admin_sistema` | todos los permisos + USERS_MANAGE (crear/editar usuarios y roles) |
@@ -64,8 +66,11 @@ Ver `docs/architecture.md` §4 y `docs/ai-tools.md`. Implementado en código
 
 ## Protección de secretos
 
-- Todas las credenciales (WhatsApp, Anthropic, OpenAI, base de datos, JWT secret) se leen
-  desde variables de entorno vía `app/core/config.py` (Pydantic `BaseSettings`).
+- Todas las credenciales (WhatsApp, Anthropic, OpenAI, Google, base de datos, JWT secret) se
+  leen desde variables de entorno vía `app/core/config.py` (Pydantic `BaseSettings`).
+  `GOOGLE_SERVICE_ACCOUNT_JSON` en particular es un secreto muy sensible (permite actuar en
+  nombre del calendario de cualquier usuario de Workspace vía delegación de dominio): tratarlo
+  con el mismo cuidado que las credenciales de base de datos.
 - `.env` está en `.gitignore`; `.env.example` documenta cada variable sin valores reales.
 - Nunca se registra el contenido de tokens/secretos en logs.
 

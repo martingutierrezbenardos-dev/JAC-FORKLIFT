@@ -128,13 +128,14 @@ base de datos, no en el modelo).
 | numero_interno | str, único | el identificador que usan los técnicos (ej. "33") |
 | numero_serie, marca, modelo, tipo | str, nullable | |
 | cliente_id | FK customers, nullable | dónde está instalada actualmente |
-| horometro | int, nullable | Fase 3 lo mantendrá actualizado automáticamente vía mantenimiento |
+| horometro | int, nullable | actualizado automáticamente al registrar un mantenimiento (Fase 3) |
 | estado | str | default `operativa` |
 | ubicacion, observaciones | str/text, nullable | |
-
-Los campos de mantenimiento (`fecha_ultimo_mantenimiento`, `fecha_proximo_mantenimiento`,
-`horas_proximo_mantenimiento`) del diseño original del brief se agregan en Fase 3 junto con
-`maintenance_records`, para no crear columnas que ningún flujo llena todavía.
+| fecha_ultimo_mantenimiento | date, nullable | Fase 3, actualizado por `maintenance_service.create_maintenance_record` |
+| fecha_proximo_mantenimiento | date, nullable | Fase 3, calculada o indicada explícitamente |
+| horas_proximo_mantenimiento | int, nullable | Fase 3, calculada o indicada explícitamente |
+| intervalo_dias_mantenimiento | int, nullable | Fase 3: regla "cada N días", si aplica a esta máquina |
+| intervalo_horas_mantenimiento | int, nullable | Fase 3: regla "cada N horas de horómetro", si aplica |
 
 ### `service_orders` (órdenes de servicio técnico) — Fase 2
 | Campo | Tipo | Notas |
@@ -168,12 +169,30 @@ guarda de forma permanente — ver `architecture.md` §7 y §8 (riesgo de almace
 | extracted_data | JSONB, nullable | resultado de extracción (imagen/comprobante) |
 | error | text, nullable | si el procesamiento falló |
 
+### `maintenance_records` — Fase 3
+| Campo | Tipo | Notas |
+|---|---|---|
+| id | UUID | PK |
+| maquina_id | FK machines | |
+| tecnico_id | FK users | quién realizó el mantenimiento |
+| fecha | date | fecha de registro (hoy, al registrarse por WhatsApp) |
+| tipo | enum `MaintenanceType` | preventivo, correctivo |
+| horometro | int, nullable | horómetro de la máquina al momento del mantenimiento |
+| trabajos_realizados | text | |
+| repuestos_utilizados | text, nullable | |
+| observaciones | text, nullable | |
+| proximo_mantenimiento_fecha | date, nullable | explícita o calculada desde `intervalo_dias_mantenimiento` |
+| proximo_mantenimiento_horas | int, nullable | explícita o calculada desde `intervalo_horas_mantenimiento` |
+
+Cada registro nuevo actualiza automáticamente los campos de mantenimiento de la `machine`
+asociada (ver `app/services/maintenance_service.py`) — la ficha de la máquina y las alertas
+nunca tienen que recalcular sobre el historial completo.
+
 ## Entidades aún no creadas (fases futuras)
 
-Sus reglas de negocio no están definidas con suficiente detalle todavía: `maintenance_records`
-(Fase 3), `vehicles`, `gps_events`, `crane_contracts`, `crane_usage` (Fase 4), `attachments`
-como tabla genérica de almacenamiento permanente de archivos (Fase 4, junto con un
-`FileStorageProvider` real).
+Sus reglas de negocio no están definidas con suficiente detalle todavía: `vehicles`,
+`gps_events`, `crane_contracts`, `crane_usage` (Fase 4), `attachments` como tabla genérica de
+almacenamiento permanente de archivos (Fase 4, junto con un `FileStorageProvider` real).
 
 ## Diagrama de relaciones
 
@@ -181,7 +200,8 @@ como tabla genérica de almacenamiento permanente de archivos (Fase 4, junto con
 users ──< expenses >── customers
   │           │
   │           └──< machines >── customers
-  │
+  │                   │
+  │                   └──< maintenance_records
   ├──< service_orders >── customers
   ├──< service_orders >── machines
   ├──< tasks (asignado_a)
@@ -189,6 +209,7 @@ users ──< expenses >── customers
   ├──< pending_actions
   ├──< conversation_messages
   ├──< media_logs
+  ├──< maintenance_records (tecnico_id)
   └──< audit_logs
 ```
 
@@ -200,6 +221,8 @@ Alembic vive en `backend/alembic/`. Migraciones aplicadas:
   auditoría, acciones pendientes, mensajes de conversación (Fase 1).
 - `0002_fase2_servicios_tecnicos.py`: `service_orders` (+ secuencia
   `service_order_number_seq` para el número de OT), `media_logs` (Fase 2).
+- `0003_fase3_mantenimiento.py`: `maintenance_records` y los campos de mantenimiento de
+  `machines` (Fase 3).
 
 Para generar nuevas migraciones tras modificar un modelo:
 
@@ -213,5 +236,7 @@ alembic upgrade head
 
 `backend/app/db/seed.py` crea usuarios, clientes y máquinas ficticias de desarrollo (Juan y
 Cristian técnicos, Marcela administración, Pedro gerente general; Cliente A/B/C; Máquinas
-33/42/51, dos de ellas asociadas a un cliente para poder probar las relaciones), tal como pide
-la sección 33 del brief. Nunca usa datos reales de la empresa.
+33/42/51, dos de ellas asociadas a un cliente para poder probar las relaciones). Las máquinas
+33 y 42 quedan con mantenimiento pendiente (una atrasada por fecha, otra por horómetro) para
+poder ver las alertas funcionando de inmediato en el dashboard. Nunca usa datos reales de la
+empresa.

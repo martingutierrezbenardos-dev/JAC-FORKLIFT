@@ -52,6 +52,11 @@ class Permission(str, Enum):
     CUSTOMERS_READ = "customers:read"
     MACHINES_READ = "machines:read"
 
+    MAINTENANCE_CREATE = "maintenance:create"
+    MAINTENANCE_READ = "maintenance:read"
+
+    CALENDAR_USE = "calendar:use"
+
 
 _BASE_FIELD_PERMISSIONS: set[Permission] = {
     Permission.EXPENSES_CREATE_OWN,
@@ -66,6 +71,9 @@ _BASE_FIELD_PERMISSIONS: set[Permission] = {
     Permission.SERVICES_UPDATE_OWN,
     Permission.CUSTOMERS_READ,
     Permission.MACHINES_READ,
+    Permission.MAINTENANCE_CREATE,
+    Permission.MAINTENANCE_READ,
+    Permission.CALENDAR_USE,
 }
 
 _BACK_OFFICE_PERMISSIONS: set[Permission] = _BASE_FIELD_PERMISSIONS | {

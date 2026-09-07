@@ -27,6 +27,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="topbar-brand">Jacobea AI — Panel interno</div>
         <nav className="topbar-nav">
           <Link href="/">Inicio</Link>
+          <Link href="/dashboard">Dashboard</Link>
           <Link href="/expenses">Gastos</Link>
           <Link href="/tasks">Tareas</Link>
           <Link href="/services">Servicios</Link>

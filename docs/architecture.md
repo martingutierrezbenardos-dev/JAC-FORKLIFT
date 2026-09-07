@@ -103,8 +103,8 @@ backend/app/
 ├── integrations/
 │   ├── whatsapp/          # cliente REAL de WhatsApp Cloud API (Meta), incl. descarga de media
 │   ├── transcription/      # transcripción de audio REAL (OpenAI Whisper) — Fase 2
+│   ├── calendar/           # interfaz + implementación REAL (Google Calendar) — Fase 3
 │   ├── gps/                # interfaz abstracta (placeholder, sin proveedor aún)
-│   ├── calendar/           # interfaz abstracta (placeholder Google Calendar)
 │   └── email/              # interfaz abstracta (placeholder Gmail/Outlook)
 ├── ai/                    # cliente LLM desacoplado + loop del agente + extracción de comprobantes (visión)
 └── tools/                 # catálogo de herramientas + implementaciones (llaman a services)
@@ -121,10 +121,15 @@ backend/app/
 | Transcripción de audio (mensajes de voz) | **Real** (Fase 2), usa la API de Whisper de OpenAI. Requiere `OPENAI_API_KEY`; si falta, el bot responde indicándolo en vez de fallar en silencio o simular una transcripción. |
 | Extracción de datos de comprobantes/boletas (OCR) | **Real** (Fase 2), usa la capacidad de visión de Claude (no un servicio de OCR aparte). Nunca inventa campos que no aparecen en la imagen; los deja en `null`. |
 | Servicios técnicos (`service_orders`), clientes, máquinas | **Real** (Fase 2): modelos, servicios, tools de IA (`crear_servicio`, `actualizar_servicio`, `buscar_servicios`, `buscar_cliente`, `buscar_maquina`) y endpoints de lectura + páginas del panel web. |
-| GPS, Google Calendar, Email | **Solo interfaces abstractas** (`integrations/gps`, `integrations/calendar`, `integrations/email`). No hay implementación concreta porque no se conoce el proveedor de GPS ni se definieron credenciales de Calendar/Email. Ningún código simula una respuesta real. |
-| Grúas, mantenimiento preventivo | Aún no implementado (Fase 3/4) — no hay tablas ni tools todavía. |
+| Mantenimiento preventivo y alertas | **Real** (Fase 3): `maintenance_records`, cálculo automático de la próxima fecha/horómetro según la regla configurada en cada máquina, y detección de máquinas atrasadas o próximas a vencer (`buscar_mantenimiento_pendiente`, endpoint `/api/reports/mantenimiento-pendiente`, tarjeta en el dashboard). |
+| Reportes avanzados (por trabajador/proveedor/cliente/máquina/sucursal, por período) | **Real** (Fase 3), en `report_service.py`. |
+| Exportación de reportes (CSV, Excel, PDF) | **Real** (Fase 3): CSV con la librería estándar, Excel con `openpyxl`, PDF con `reportlab`. Endpoint `/api/reports/gastos/export`. |
+| Dashboard web | **Real** (Fase 3): página `/dashboard` con indicadores clave y gráficos de barras simples (CSS, sin librería de gráficos). |
+| Google Calendar | **Real** (Fase 3), usa una cuenta de servicio de Google Workspace con delegación de dominio completo (`GoogleCalendarProvider`). Verifica disponibilidad antes de crear una reunión, tal como pide la sección 13 del brief. Requiere `GOOGLE_SERVICE_ACCOUNT_JSON` y que un administrador de Google Workspace haya autorizado esa cuenta de servicio — sin eso, `crear_reunion`/`consultar_calendario` fallan explícitamente en vez de simular una respuesta. No se pudo probar de punta a punta en este entorno de desarrollo por no contar con una cuenta de Google Workspace real; los tests usan un `CalendarProvider` de prueba inyectado (mismo patrón que WhatsApp/transcripción/visión). |
+| GPS, Email | **Solo interfaces abstractas** (`integrations/gps`, `integrations/email`). No hay implementación concreta porque no se conoce el proveedor de GPS ni está definido el flujo de envío de correo (Fase 4). Ningún código simula una respuesta real. |
+| Grúas | Aún no implementado (Fase 4) — no hay tablas ni tools todavía. |
 | Almacenamiento permanente de archivos (fotos de comprobantes, audios) | **No implementado**: los archivos de WhatsApp se procesan al vuelo (transcripción/extracción) y se descartan; solo el resultado (texto/JSON) queda en `media_logs` para auditoría. No hay proveedor de almacenamiento (S3/GCS) configurado — ver riesgo en la sección 8. |
-| Panel web | **Real**: login, usuarios, gastos, tareas, servicios técnicos, clientes y máquinas, consumiendo la API REST real. |
+| Panel web | **Real**: login, dashboard, usuarios, gastos, tareas, servicios técnicos, clientes y máquinas, consumiendo la API REST real. |
 
 ## 8. Riesgos técnicos identificados
 
@@ -158,17 +163,31 @@ backend/app/
 7. **Costo de la extracción de comprobantes**: cada foto de boleta implica una llamada a
    Claude con imagen (más cara que una llamada de solo texto). Aceptable en el volumen de un
    equipo técnico pequeño; monitorear costos si el volumen de fotos crece mucho.
+8. **Google Calendar sin probar contra un Workspace real**: la integración es código real
+   (no un mock), pero este entorno de desarrollo no tiene una cuenta de servicio de Google
+   Workspace real para probarla de punta a punta. Antes de usarla en producción: (a) crear un
+   proyecto en Google Cloud, (b) crear una cuenta de servicio con el scope
+   `https://www.googleapis.com/auth/calendar`, (c) un administrador de Workspace debe
+   autorizar esa cuenta de servicio para delegación de dominio completo, (d) cargar el JSON
+   de credenciales en `GOOGLE_SERVICE_ACCOUNT_JSON`. Sin esto, las tools de calendario
+   responden con un error claro en vez de simular disponibilidad o crear un evento falso.
+9. **No hay recordatorios automáticos de mantenimiento por WhatsApp todavía**: la Fase 3
+   agrega la *detección* de mantenimiento atrasado/próximo (tool, endpoint, dashboard), pero
+   no un job programado que le escriba proactivamente al responsable — eso requeriría además
+   una plantilla de WhatsApp aprobada por Meta (ver riesgo 1). Queda como trabajo futuro
+   conectar la detección ya construida a un cron + `WhatsAppClient.send_template()`.
 
 ## 9. Plan de fases (resumen)
 
 - **Fase 0** (este documento): arquitectura, modelo de datos, contratos de API, estructura.
 - **Fase 1 (MVP)**: WhatsApp (texto), agente con tool calling, usuarios/roles/permisos,
   gastos, tareas, panel web mínimo.
-- **Fase 2 (implementada en este commit)**: audio + transcripción (OpenAI Whisper), OCR de
-  comprobantes (visión de Claude), servicios técnicos (`service_orders`), clientes, máquinas.
-- **Fase 3**: mantenimiento preventivo + alertas, reportes avanzados, dashboard, Excel/PDF,
-  Google Calendar.
+- **Fase 2**: audio + transcripción (OpenAI Whisper), OCR de comprobantes (visión de Claude),
+  servicios técnicos (`service_orders`), clientes, máquinas.
+- **Fase 3 (implementada en este commit)**: mantenimiento preventivo + alertas, reportes
+  avanzados (por trabajador/proveedor/cliente/máquina/sucursal, por período), exportación
+  CSV/Excel/PDF, dashboard web, Google Calendar.
 - **Fase 4**: correo electrónico, GPS, camionetas, grúas, almacenamiento permanente de
-  archivos (S3/GCS).
+  archivos (S3/GCS), recordatorios proactivos de mantenimiento vía plantillas de WhatsApp.
 - **Fase 5**: inteligencia empresarial (consultas analíticas agregadas, comparativas
   mensuales, resúmenes ejecutivos) — siempre basada en datos reales y trazable a registros.

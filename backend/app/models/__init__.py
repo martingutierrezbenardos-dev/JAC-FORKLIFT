@@ -5,6 +5,7 @@ from app.models.conversation_message import ConversationMessage, MessageRole
 from app.models.customer import Customer
 from app.models.expense import Currency, Expense, ExpenseCategory, PaymentMethod, ReimbursementStatus
 from app.models.machine import Machine
+from app.models.maintenance_record import MaintenanceRecord, MaintenanceType
 from app.models.media_log import MediaLog, MediaType
 from app.models.pending_action import PendingAction, PendingActionStatus
 from app.models.service_order import ServiceOrder, ServiceOrderStatus
@@ -33,4 +34,6 @@ __all__ = [
     "ServiceOrderStatus",
     "MediaLog",
     "MediaType",
+    "MaintenanceRecord",
+    "MaintenanceType",
 ]

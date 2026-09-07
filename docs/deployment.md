@@ -72,3 +72,9 @@ Ver README.md para el comando exacto y las variables necesarias.
 - [ ] `ENVIRONMENT=production` y `DEBUG=false`.
 - [ ] Revisar que ningún archivo `.env` esté en el repositorio (`git status` limpio).
 - [ ] Usuarios reales cargados con sus roles correctos (no los datos ficticios de `seed.py`).
+- [ ] Si se va a usar Google Calendar: cuenta de servicio creada, autorizada por un admin de
+      Workspace para delegación de dominio completo, y `GOOGLE_SERVICE_ACCOUNT_JSON` cargado
+      como secreto (no en el repositorio). Sin esto, `crear_reunion`/`consultar_calendario`
+      simplemente responden que el calendario no está configurado — no bloquea el resto del
+      sistema.
+- [ ] Si se va a usar transcripción de audio: `OPENAI_API_KEY` configurada.

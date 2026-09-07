@@ -30,6 +30,9 @@ def buscar_maquina(db: Session, actor: User, data: BuscarMaquinaInput) -> dict:
                 "estado": m.estado,
                 "ubicacion": m.ubicacion,
                 "observaciones": m.observaciones,
+                "fecha_ultimo_mantenimiento": m.fecha_ultimo_mantenimiento,
+                "fecha_proximo_mantenimiento": m.fecha_proximo_mantenimiento,
+                "horas_proximo_mantenimiento": m.horas_proximo_mantenimiento,
             }
         )
     return {"resultados": to_jsonable(fichas)}

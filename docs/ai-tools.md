@@ -63,12 +63,17 @@ Definidas en `app/tools/registry.py`, implementadas en `app/tools/*_tools.py`.
 | `crear_tarea` | 1 si `asignado_a` es uno mismo (o vacío); 2 si se asigna a un tercero | `TASKS_CREATE_OWN` / `TASKS_ASSIGN_OTHERS` | Crea una tarea. |
 | `completar_tarea` | 1 (propia) / requiere `TASKS_COMPLETE_ALL` para ajenas | `TASKS_COMPLETE_OWN` | Marca una tarea como completada. |
 | `buscar_tareas` | 1 | `TASKS_READ_OWN` (auto-filtrado) o `TASKS_READ_ALL` | Lista tareas con filtros. |
-| `generar_reporte` | 1 | `REPORTS_VIEW_OWN` (auto-filtrado) o `REPORTS_VIEW_ALL` | Genera un resumen agregado de gastos o tareas por período/categoría/usuario. |
+| `generar_reporte` | 1 | `REPORTS_VIEW_OWN` (auto-filtrado) o `REPORTS_VIEW_ALL` | Genera un resumen de gastos, tareas o servicios (`tipo`) para un período (`periodo`: día/semana/mes, o `desde`/`hasta` explícitos), con desgloses por categoría, trabajador, proveedor, cliente, máquina o sucursal según corresponda. |
 | `crear_servicio` (Fase 2) | 1 | `SERVICES_CREATE_OWN` | Crea una orden de servicio técnico para quien escribe (visita a un cliente para revisar/reparar una máquina). |
 | `actualizar_servicio` (Fase 2) | 1, salvo que `estado=cerrado` (2) | `SERVICES_UPDATE_OWN` (propia) o `SERVICES_UPDATE_ALL` (ajena, requiere además `SERVICES_ASSIGN`); cerrar requiere `SERVICES_CLOSE` | Actualiza horas de salida/llegada/inicio/término, cliente, máquina, diagnóstico, trabajo realizado, repuestos, estado. Si no se indica el número de orden, usa la orden abierta más reciente de quien escribe — así el técnico puede reportar en lenguaje natural ("salí a las 8:30", "llegué donde el cliente") sin fricción. |
 | `buscar_servicios` (Fase 2) | 1 | `SERVICES_READ_OWN` (auto-filtrado) o `SERVICES_READ_ALL` | Busca órdenes de servicio por estado, técnico o cliente. |
 | `buscar_cliente` (Fase 2) | 1 | `CUSTOMERS_READ` | Ficha de un cliente (dirección, contacto, tipo, estado). |
-| `buscar_maquina` (Fase 2) | 1 | `MACHINES_READ` | Ficha de una máquina (marca, modelo, cliente asociado, horómetro, estado, ubicación). |
+| `buscar_maquina` (Fase 2) | 1 | `MACHINES_READ` | Ficha de una máquina (marca, modelo, cliente asociado, horómetro, estado, ubicación, fechas de mantenimiento). |
+| `crear_mantenimiento` (Fase 3) | 1 | `MAINTENANCE_CREATE` | Registra un mantenimiento (preventivo/correctivo) de una máquina y actualiza automáticamente su horómetro y próxima fecha/horas de mantenimiento. |
+| `buscar_mantenimientos` (Fase 3) | 1 | `MAINTENANCE_READ` | Historial de mantenimientos, opcionalmente filtrado por máquina. |
+| `buscar_mantenimiento_pendiente` (Fase 3) | 1 | `MAINTENANCE_READ` | Lista máquinas con mantenimiento atrasado o próximo a vencer (por fecha o por horómetro). |
+| `crear_reunion` (Fase 3) | 1 si no hay más participantes; 2 si hay otros participantes | `CALENDAR_USE` | Crea una reunión en Google Calendar, verificando disponibilidad de todos los asistentes antes de agendar. |
+| `consultar_calendario` (Fase 3) | 1 | `CALENDAR_USE` | Consulta si quien escribe está disponible en un rango de fecha/hora. |
 
 Cada tool declara su `input_schema` con Pydantic, que se traduce a JSON Schema para el LLM
 (`model.dump_json_schema()`), así el contrato de datos es el mismo en la API REST y en la
@@ -82,14 +87,17 @@ que se busca. Cerrar la orden sí es una acción más definitiva (afecta reporte
 futura), por eso se trata como nivel 2 y además exige el permiso `SERVICES_CLOSE`, que solo
 tienen jefe de servicios técnicos, gerente general y admin del sistema.
 
+Nota sobre `crear_reunion`: siempre requiere que quien escribe tenga un email configurado
+(sin eso no hay cómo usar Google Calendar), y valida que cada participante invitado también
+tenga uno — si no, rechaza la operación explicando a quién le falta, en vez de agendar solo a
+medias. Antes de crear el evento, siempre verifica disponibilidad de todos los asistentes
+(sección 13 del brief); si alguien tiene un conflicto, no agenda y lo informa.
+
 ## Herramientas planificadas para fases futuras (documentadas, no implementadas)
 
 Se listan explícitamente para que quede claro que existen en el diseño pero no en código
 todavía (nada de esto está "simulado" en el agente):
 
-- `crear_mantenimiento`, alertas de mantenimiento preventivo (Fase 3, requiere
-  `maintenance_records` y los campos de mantenimiento de `machines`)
-- `crear_reunion`, `consultar_calendario` (Fase 3, requiere integración Google Calendar real)
 - `preparar_correo`, `enviar_correo` (Fase 4, `enviar_correo` siempre nivel 2: se prepara un
   borrador y se pide confirmación explícita antes de enviar, tal como pide la sección 14)
 - `consultar_gps_vehiculo`, `consultar_horas_grua` (Fase 4, dependen de proveedores externos
@@ -112,9 +120,12 @@ los permisos y niveles de confirmación están garantizados por código (ver `se
 ## Trazabilidad
 
 Toda respuesta que involucre datos agregados (`generar_reporte`) incluye en el resultado de
-la tool los IDs de los registros (`expenses.id` / `tasks.id`) usados para el cálculo, que se
-guardan en `audit_logs.datos_nuevos` junto con el tool call. Esto permite reconstruir, para
-cualquier cifra que la IA mencione, exactamente qué filas la generaron (sección 31 del brief).
+la tool los IDs de los registros (`expenses.id` / `tasks.id` / `service_orders.id`) usados
+para el cálculo, que se guardan en `audit_logs.datos_nuevos` junto con el tool call. Esto
+permite reconstruir, para cualquier cifra que la IA mencione, exactamente qué filas la
+generaron (sección 31 del brief). Los reportes exportados a CSV/Excel/PDF
+(`/api/reports/gastos/export`) se generan a partir de los mismos registros ya filtrados por
+permisos — nunca de una consulta distinta.
 
 ## Cómo agregar una nueva herramienta
 

@@ -17,16 +17,20 @@ from sqlalchemy.orm import Session
 from app.core.permissions import Permission, UserRole, has_permission
 from app.models.service_order import ServiceOrderStatus
 from app.models.user import User
+from app.schemas.calendar import ConsultarCalendarioInput, CrearReunionInput
 from app.schemas.customer import BuscarClienteInput
 from app.schemas.expense import ExpenseCreate, ExpenseSearchParams, ExpenseUpdateToolInput
 from app.schemas.machine import BuscarMaquinaInput
+from app.schemas.maintenance import MaintenanceAlertParams, MaintenanceCreate, MaintenanceSearchParams
 from app.schemas.service_order import ServiceOrderCreate, ServiceOrderSearchParams, ServiceOrderUpdate
 from app.schemas.task import CompletarTareaInput, TaskCreate, TaskSearchParams
 from app.schemas.user import BuscarUsuarioInput
 from app.tools import (
+    calendar_tools,
     customer_tools,
     expense_tools,
     machine_tools,
+    maintenance_tools,
     report_tools,
     service_tools,
     task_tools,
@@ -77,6 +81,14 @@ def _actualizar_servicio_confirmation_level(data: BaseModel, actor: User) -> int
     if data.estado == ServiceOrderStatus.CERRADO:
         return 2
     return 1
+
+
+def _crear_reunion_confirmation_level(data: BaseModel, actor: User) -> int:
+    assert isinstance(data, CrearReunionInput)
+    # Una reunión que involucra a otras personas siempre requiere confirmación (sección 13
+    # del brief: "verificar disponibilidad y pedir confirmación cuando sea necesario"). Un
+    # bloqueo puramente personal en el propio calendario no necesita fricción.
+    return 2 if data.participantes_telefonos else 1
 
 
 REGISTRY: dict[str, ToolDefinition] = {
@@ -154,8 +166,10 @@ REGISTRY: dict[str, ToolDefinition] = {
     "generar_reporte": ToolDefinition(
         name="generar_reporte",
         description=(
-            "Genera un resumen agregado de gastos o tareas para un período. El alcance "
-            "(propio o de toda la empresa) depende de los permisos de quien pregunta."
+            "Genera un resumen agregado de gastos, tareas o servicios técnicos para un "
+            "período (día, semana, mes, o un rango de fechas explícito), con desgloses por "
+            "categoría, trabajador, proveedor, cliente, máquina o sucursal según corresponda. "
+            "El alcance (propio o de toda la empresa) depende de los permisos de quien pregunta."
         ),
         input_model=report_tools.GenerarReporteInput,
         handler=report_tools.generar_reporte,
@@ -213,6 +227,58 @@ REGISTRY: dict[str, ToolDefinition] = {
         input_model=BuscarMaquinaInput,
         handler=machine_tools.buscar_maquina,
         required_permission=Permission.MACHINES_READ,
+        confirmation_level=1,
+    ),
+    "crear_mantenimiento": ToolDefinition(
+        name="crear_mantenimiento",
+        description=(
+            "Registra un mantenimiento (preventivo o correctivo) realizado a una máquina: "
+            "horómetro, trabajos realizados, repuestos, y opcionalmente cuándo corresponde "
+            "el próximo. Actualiza automáticamente la ficha de la máquina."
+        ),
+        input_model=MaintenanceCreate,
+        handler=maintenance_tools.crear_mantenimiento,
+        required_permission=Permission.MAINTENANCE_CREATE,
+        confirmation_level=1,
+    ),
+    "buscar_mantenimientos": ToolDefinition(
+        name="buscar_mantenimientos",
+        description="Busca el historial de mantenimientos registrados, opcionalmente filtrado por máquina.",
+        input_model=MaintenanceSearchParams,
+        handler=maintenance_tools.buscar_mantenimientos,
+        required_permission=Permission.MAINTENANCE_READ,
+        confirmation_level=1,
+    ),
+    "buscar_mantenimiento_pendiente": ToolDefinition(
+        name="buscar_mantenimiento_pendiente",
+        description=(
+            "Lista las máquinas con mantenimiento preventivo atrasado o próximo a vencer "
+            "(por fecha o por horómetro), para responder preguntas como '¿qué máquinas "
+            "tienen mantenimiento pendiente?'."
+        ),
+        input_model=MaintenanceAlertParams,
+        handler=maintenance_tools.buscar_mantenimiento_pendiente,
+        required_permission=Permission.MAINTENANCE_READ,
+        confirmation_level=1,
+    ),
+    "crear_reunion": ToolDefinition(
+        name="crear_reunion",
+        description=(
+            "Crea una reunión en Google Calendar, verificando disponibilidad de todos los "
+            "participantes antes de agendar. Requiere que quien escribe y los participantes "
+            "tengan un email configurado. Confirmar antes de agendar si hay más participantes."
+        ),
+        input_model=CrearReunionInput,
+        handler=calendar_tools.crear_reunion,
+        required_permission=Permission.CALENDAR_USE,
+        confirmation_level=_crear_reunion_confirmation_level,
+    ),
+    "consultar_calendario": ToolDefinition(
+        name="consultar_calendario",
+        description="Consulta si quien escribe está disponible en un rango de fecha/hora según su Google Calendar.",
+        input_model=ConsultarCalendarioInput,
+        handler=calendar_tools.consultar_calendario,
+        required_permission=Permission.CALENDAR_USE,
         confirmation_level=1,
     ),
 }

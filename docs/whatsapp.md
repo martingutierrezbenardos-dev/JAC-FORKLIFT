@@ -93,13 +93,15 @@ Todavía no soportados. El webhook responde:
 `type: text`. Es un cliente real (usa `httpx`), pero **no se puede probar de punta a punta
 sin credenciales reales** — los tests unitarios lo mockean (`tests/test_webhook.py`).
 
-### Mensajes proactivos (alertas, recordatorios) — fuera de Fase 1
+### Mensajes proactivos (alertas, recordatorios) — aún no implementado
 
 Fuera de la ventana de 24 horas desde el último mensaje del usuario, Meta exige usar
-**plantillas de mensaje pre-aprobadas** (`message templates`). Las alertas de mantenimiento
-preventivo (Fase 3) y otras notificaciones proactivas deberán registrarse como plantillas en
-el Business Manager antes de poder enviarse. El cliente ya deja un método
-`send_template()` preparado para cuando corresponda, pero no se usa en Fase 1.
+**plantillas de mensaje pre-aprobadas** (`message templates`). La Fase 3 agrega la
+*detección* de mantenimiento atrasado o próximo a vencer (`buscar_mantenimiento_pendiente`,
+`/api/reports/mantenimiento-pendiente`, tarjeta en el dashboard), pero **no** envía avisos
+proactivos por WhatsApp todavía: eso requiere registrar una plantilla en el Business Manager
+y conectar la detección a un job programado. El cliente ya deja un método
+`send_template()` preparado para cuando corresponda.
 
 ## Identificación de empresa
 

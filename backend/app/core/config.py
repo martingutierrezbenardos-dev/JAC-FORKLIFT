@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # Tamaño máximo de un archivo multimedia de WhatsApp que se procesa (bytes)
     max_media_download_bytes: int = Field(default=20 * 1024 * 1024)
 
+    # Google Calendar (cuenta de servicio con delegación de dominio) — Fase 3
+    # Contenido completo del JSON de credenciales de la cuenta de servicio (no una ruta).
+    google_service_account_json: str | None = Field(default=None)
+
     # Rate limiting
     rate_limit_webhook: str = Field(default="30/minute")
     rate_limit_login: str = Field(default="10/minute")
