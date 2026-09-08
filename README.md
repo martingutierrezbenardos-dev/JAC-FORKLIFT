@@ -8,7 +8,7 @@ formularios.
 Este README está escrito para que lo pueda seguir alguien que no programa. Si algo no queda
 claro, revisa `docs/` (hay un documento por tema) antes de tocar código.
 
-## 1. ¿Qué hace el sistema hoy (Fases 1 a 4)?
+## 1. ¿Qué hace el sistema hoy (Fases 1 a 5)?
 
 - Un trabajador registrado le escribe por WhatsApp cosas como *"Compré un rodamiento en
   Repuestos X, 85 lucas, plata mía"* y el sistema registra automáticamente el gasto.
@@ -36,13 +36,20 @@ claro, revisa `docs/` (hay un documento por tema) antes de tocar código.
   automáticamente cuando un contrato está por agotarse (≥85% de las horas usadas).
 - Las fotos de comprobantes se pueden guardar de forma permanente (AWS S3, opcional) y quedan
   enlazadas al gasto correspondiente como respaldo.
+- Se puede pedir *"compara los gastos de este mes con el mes pasado"* y el sistema responde con
+  el monto de cada período y la variación, para gastos, servicios o tareas.
+- Gerencia y administración pueden pedir un resumen ejecutivo del período (gastos con su
+  variación, tareas, servicios, mantenimiento pendiente y grúas por agotarse) por WhatsApp o
+  en el panel web — es información de toda la empresa, así que no existe una versión "propia"
+  para otros roles.
 - Cada rol (técnico, vendedor, administración, gerencia, etc.) ve solo la información que le
   corresponde — un técnico no puede ver el gasto total de la empresa, por ejemplo.
 - Acciones sensibles (modificar un gasto, asignarle una tarea a otra persona, cerrar una
   orden de servicio, agendar una reunión con terceros, enviar un correo) piden confirmación
   explícita antes de ejecutarse.
-- Hay un panel web con un dashboard de indicadores y listados de usuarios, gastos, tareas,
-  servicios técnicos, clientes, máquinas, vehículos y contratos de grúa.
+- Hay un panel web con un dashboard de indicadores, un resumen ejecutivo, y listados de
+  usuarios, gastos, tareas, servicios técnicos, clientes, máquinas, vehículos y contratos de
+  grúa.
 
 Lo que **todavía no existe** (y por qué) está documentado en
 `docs/architecture.md` (sección "Qué es real y qué es placeholder").
@@ -244,7 +251,7 @@ tests automatizados.
 - Google Calendar real (cuenta de servicio con delegación de dominio): verifica disponibilidad
   antes de agendar una reunión, tal como pide el brief.
 
-**Fase 4 — completada en este commit:**
+**Fase 4 — completada:**
 - Correo electrónico real (Gmail, misma cuenta de servicio de Google Workspace que Calendar):
   `preparar_correo` arma un borrador, `enviar_correo` lo envía pero **siempre** pide
   confirmación explícita (nivel 2 fijo, sin excepción), `buscar_correos` consulta la casilla.
@@ -259,10 +266,23 @@ tests automatizados.
   la URL queda guardada en `media_logs` y disponible para adjuntarla al gasto.
 - 111 tests automatizados en total (24 nuevos de Fase 4).
 
-**Pendiente (fases futuras, ver `docs/architecture.md` §9):**
-- Fase 4 (resto, aún no implementado): proveedor GPS real, recordatorios proactivos de
-  mantenimiento por WhatsApp (requiere plantillas aprobadas por Meta).
-- Fase 5: inteligencia empresarial (comparativas, resúmenes ejecutivos basados en datos).
+**Fase 5 — completada en este commit:**
+- Comparativas de período (`comparar_periodo`): gastos, servicios o tareas de un período
+  contra el período inmediatamente anterior de igual duración, con variación absoluta y
+  porcentual. Reutiliza los mismos reportes de fases anteriores — no calcula ninguna cifra
+  nueva por su cuenta.
+- Resumen ejecutivo (`generar_resumen_ejecutivo`, página `/resumen-ejecutivo` en el panel
+  web): gastos con su variación, tareas, servicios, máquinas con mantenimiento pendiente y
+  contratos de grúa por agotarse, todo para un período. Es información de toda la empresa —
+  requiere el permiso de ver reportes de toda la empresa, sin una versión acotada a un usuario.
+- No se agregó ninguna tabla ni integración externa nueva: es una capa de agregación sobre
+  datos ya reales y trazables a IDs de registros concretos.
+- 119 tests automatizados en total (8 nuevos de Fase 5).
+
+**Pendiente (ver `docs/architecture.md` §9):**
+- Proveedor GPS real (la empresa aún no ha definido cuál usa).
+- Recordatorios proactivos de mantenimiento por WhatsApp (requiere plantillas aprobadas por
+  Meta, ver riesgo 9 de `docs/architecture.md`).
 
 No se implementó ninguna de estas para no simular integraciones que no existen todavía — ver
 `docs/architecture.md` sección "Qué es real y qué es placeholder" para el detalle exacto.

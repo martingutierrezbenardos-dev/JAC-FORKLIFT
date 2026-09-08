@@ -62,6 +62,15 @@ fuerza `user_id = <el técnico>` sin importar lo que haya escrito, y la IA respo
 gastos del propio técnico junto con una nota de que no tiene acceso a información agregada de
 la empresa.
 
+**Excepción deliberada — `generar_resumen_ejecutivo` (Fase 5)**: a diferencia de
+`buscar_gastos`/`generar_reporte`, que se auto-acotan a "lo propio" cuando falta el permiso
+`_ALL`, el resumen ejecutivo no tiene ninguna versión con sentido acotada a un solo usuario —
+por diseño, sin `REPORTS_VIEW_ALL` la operación se **rechaza** (`PermissionDeniedError`) en vez
+de devolver un resumen "vacío" o silenciosamente parcial. Se verifica dos veces, igual que el
+resto: a nivel de tool (`required_permission=Permission.REPORTS_VIEW_ALL` en el registro) y a
+nivel de servicio (`analytics_service.generar_resumen_ejecutivo` repite el chequeo, porque el
+endpoint REST no pasa por el registro de tools).
+
 ## Niveles de confirmación de acciones
 
 Ver `docs/architecture.md` §4 y `docs/ai-tools.md`. Implementado en código

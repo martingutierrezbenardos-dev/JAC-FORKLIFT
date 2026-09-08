@@ -95,9 +95,15 @@ def generar_reporte_gastos(db: Session, *, actor: User, desde: date | None, hast
     }
 
 
-def generar_reporte_tareas(db: Session, *, actor: User) -> dict:
+def generar_reporte_tareas(
+    db: Session, *, actor: User, desde: date | None = None, hasta: date | None = None
+) -> dict:
     params = TaskSearchParams()
     tasks = task_service.search_tasks(db, actor=actor, params=params)
+    if desde is not None:
+        tasks = [t for t in tasks if t.created_at.date() >= desde]
+    if hasta is not None:
+        tasks = [t for t in tasks if t.created_at.date() <= hasta]
 
     alcance = "empresa completa" if has_permission(actor.rol, Permission.TASKS_READ_ALL) else "propio"
     por_estado: dict[str, int] = {}
@@ -106,7 +112,9 @@ def generar_reporte_tareas(db: Session, *, actor: User) -> dict:
 
     return {
         "alcance": alcance,
+        "periodo": {"desde": str(desde) if desde else None, "hasta": str(hasta) if hasta else None},
         "cantidad_registros": len(tasks),
+        "completadas": por_estado.get("completada", 0),
         "por_estado": por_estado,
         "registros_usados": [str(t.id) for t in tasks],
     }
@@ -118,9 +126,15 @@ def _horas_entre(inicio, fin) -> float | None:
     return (fin - inicio).total_seconds() / 3600
 
 
-def generar_reporte_servicios(db: Session, *, actor: User) -> dict:
+def generar_reporte_servicios(
+    db: Session, *, actor: User, desde: date | None = None, hasta: date | None = None
+) -> dict:
     params = ServiceOrderSearchParams()
     orders = service_order_service.search_service_orders(db, actor=actor, params=params)
+    if desde is not None:
+        orders = [o for o in orders if o.fecha >= desde]
+    if hasta is not None:
+        orders = [o for o in orders if o.fecha <= hasta]
 
     alcance = "empresa completa" if has_permission(actor.rol, Permission.SERVICES_READ_ALL) else "propio"
 
@@ -156,7 +170,9 @@ def generar_reporte_servicios(db: Session, *, actor: User) -> dict:
 
     return {
         "alcance": alcance,
+        "periodo": {"desde": str(desde) if desde else None, "hasta": str(hasta) if hasta else None},
         "cantidad_registros": len(orders),
+        "cerrados": por_estado.get("cerrado", 0),
         "por_tecnico": por_tecnico,
         "por_estado": por_estado,
         "por_cliente": por_cliente,

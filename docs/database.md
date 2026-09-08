@@ -232,6 +232,14 @@ Las horas utilizadas/disponibles y el porcentaje de uso (con alerta al 85%, secc
 brief) se calculan en `app/services/crane_service.py` sumando `crane_usage` contra el
 contrato — no se guarda un total redundante en `crane_contracts`.
 
+### Fase 5 — sin cambios de esquema
+
+La inteligencia empresarial (`comparar_periodo`, `generar_resumen_ejecutivo`,
+`app/services/analytics_service.py`) es una capa de agregación sobre las tablas ya existentes
+(`expenses`, `tasks`, `service_orders`, `machines`/`maintenance_records`, `crane_contracts`/
+`crane_usage`) — no crea ninguna tabla ni columna nueva. No hay migración `0005` porque no hay
+nada que migrar.
+
 ## Entidades aún no creadas (fases futuras)
 
 Sus reglas de negocio no están definidas con suficiente detalle todavía: `gps_events`

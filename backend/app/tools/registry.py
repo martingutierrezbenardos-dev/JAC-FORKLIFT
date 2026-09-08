@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.permissions import Permission, UserRole, has_permission
 from app.models.service_order import ServiceOrderStatus
 from app.models.user import User
+from app.schemas.analytics import CompararPeriodoInput, ResumenEjecutivoInput
 from app.schemas.calendar import ConsultarCalendarioInput, CrearReunionInput
 from app.schemas.crane import ConsultarHorasGruaInput, RegistrarUsoGruaInput
 from app.schemas.customer import BuscarClienteInput
@@ -29,6 +30,7 @@ from app.schemas.task import CompletarTareaInput, TaskCreate, TaskSearchParams
 from app.schemas.user import BuscarUsuarioInput
 from app.schemas.vehicle import BuscarVehiculoInput, ConsultarRangoVehiculoInput, ConsultarUbicacionVehiculoInput
 from app.tools import (
+    analytics_tools,
     calendar_tools,
     crane_tools,
     customer_tools,
@@ -368,6 +370,33 @@ REGISTRY: dict[str, ToolDefinition] = {
         input_model=ConsultarHorasGruaInput,
         handler=crane_tools.consultar_horas_grua,
         required_permission=Permission.CRANES_READ,
+        confirmation_level=1,
+    ),
+    "comparar_periodo": ToolDefinition(
+        name="comparar_periodo",
+        description=(
+            "Compara gastos, servicios o tareas de un período contra el período inmediatamente "
+            "anterior de igual duración (ej. 'este mes' vs 'el mes pasado'), con la variación "
+            "absoluta y porcentual. El alcance (propio o de toda la empresa) depende de los "
+            "permisos de quien pregunta, igual que generar_reporte."
+        ),
+        input_model=CompararPeriodoInput,
+        handler=analytics_tools.comparar_periodo,
+        required_permission=Permission.REPORTS_VIEW_OWN,
+        confirmation_level=1,
+    ),
+    "generar_resumen_ejecutivo": ToolDefinition(
+        name="generar_resumen_ejecutivo",
+        description=(
+            "Genera un resumen ejecutivo de la empresa para un período: gastos (con variación "
+            "vs. el período anterior), tareas, servicios técnicos, máquinas con mantenimiento "
+            "pendiente y contratos de grúa por agotarse. Es información agregada de toda la "
+            "empresa — requiere permiso de ver reportes de toda la empresa, no existe una "
+            "versión acotada a un solo usuario."
+        ),
+        input_model=ResumenEjecutivoInput,
+        handler=analytics_tools.generar_resumen_ejecutivo,
+        required_permission=Permission.REPORTS_VIEW_ALL,
         confirmation_level=1,
     ),
 }

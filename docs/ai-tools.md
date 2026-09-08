@@ -83,6 +83,8 @@ Definidas en `app/tools/registry.py`, implementadas en `app/tools/*_tools.py`.
 | `consultar_viajes_vehiculo` (Fase 4) | 1 | `VEHICLES_READ` | Consulta el historial de viajes de un vehículo en un rango de fechas, vía el proveedor GPS. |
 | `registrar_uso_grua` (Fase 4) | 1 | `CRANES_REGISTER` | Registra horas de uso de grúa contra el contrato activo de un cliente, y devuelve el saldo de horas disponibles y si el contrato está por agotarse (≥85% usado). |
 | `consultar_horas_grua` (Fase 4) | 1 | `CRANES_READ` (con `cliente_nombre`) o `CRANES_MANAGE` (sin filtro, lista todos los contratos activos) | Consulta el saldo de horas de uno o todos los contratos de grúa activos. |
+| `comparar_periodo` (Fase 5) | 1 | `REPORTS_VIEW_OWN` (auto-filtrado) o `REPORTS_VIEW_ALL` | Compara gastos, servicios o tareas (`tipo`) de un período contra el período inmediatamente anterior de igual duración, con la variación absoluta y porcentual. Mismo alcance y auto-filtrado que `generar_reporte` — reutiliza esos mismos reportes internamente. |
+| `generar_resumen_ejecutivo` (Fase 5) | 1 | `REPORTS_VIEW_ALL` (sin excepción) | Resumen ejecutivo de toda la empresa para un período: gastos (con variación vs. el período anterior), tareas, servicios, máquinas con mantenimiento pendiente y contratos de grúa por agotarse. A diferencia de `generar_reporte`, no existe una versión acotada a "lo propio": sin `REPORTS_VIEW_ALL` se rechaza la operación en vez de auto-filtrar en silencio. |
 
 Cada tool declara su `input_schema` con Pydantic, que se traduce a JSON Schema para el LLM
 (`model.dump_json_schema()`), así el contrato de datos es el mismo en la API REST y en la
@@ -126,13 +128,20 @@ los permisos y niveles de confirmación están garantizados por código (ver `se
 
 ## Trazabilidad
 
-Toda respuesta que involucre datos agregados (`generar_reporte`) incluye en el resultado de
-la tool los IDs de los registros (`expenses.id` / `tasks.id` / `service_orders.id`) usados
-para el cálculo, que se guardan en `audit_logs.datos_nuevos` junto con el tool call. Esto
-permite reconstruir, para cualquier cifra que la IA mencione, exactamente qué filas la
-generaron (sección 31 del brief). Los reportes exportados a CSV/Excel/PDF
-(`/api/reports/gastos/export`) se generan a partir de los mismos registros ya filtrados por
-permisos — nunca de una consulta distinta.
+Toda respuesta que involucre datos agregados (`generar_reporte`, `comparar_periodo`,
+`generar_resumen_ejecutivo`) incluye en el resultado de la tool los IDs de los registros
+(`expenses.id` / `tasks.id` / `service_orders.id`) usados para el cálculo, que se guardan en
+`audit_logs.datos_nuevos` junto con el tool call. Esto permite reconstruir, para cualquier
+cifra que la IA mencione, exactamente qué filas la generaron (sección 31 del brief). Los
+reportes exportados a CSV/Excel/PDF (`/api/reports/gastos/export`) se generan a partir de los
+mismos registros ya filtrados por permisos — nunca de una consulta distinta.
+
+`comparar_periodo` y `generar_resumen_ejecutivo` (Fase 5) no calculan ninguna cifra propia:
+llaman a `report_service.generar_reporte_*` (el mismo código que ya usa `generar_reporte`,
+ahora con `desde`/`hasta` opcionales también para tareas y servicios) una vez por período, y
+solo restan/comparan los resultados. Esto significa que cualquier corrección futura a un
+reporte base se refleja automáticamente en las comparativas y en el resumen ejecutivo, sin
+tener que mantener dos implementaciones del mismo cálculo.
 
 ## Cómo agregar una nueva herramienta
 

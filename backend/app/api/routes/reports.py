@@ -5,11 +5,12 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import domain_errors_as_http
 from app.auth.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.expense import ExpenseSearchParams
-from app.services import export_service, expense_service, maintenance_service, report_service
+from app.services import analytics_service, export_service, expense_service, maintenance_service, report_service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -68,18 +69,26 @@ def exportar_gastos(
 
 @router.get("/tareas")
 def reporte_tareas(
+    periodo: str | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    return report_service.generar_reporte_tareas(db, actor=current_user)
+    desde, hasta = report_service.resolve_periodo(periodo, desde, hasta)
+    return report_service.generar_reporte_tareas(db, actor=current_user, desde=desde, hasta=hasta)
 
 
 @router.get("/servicios")
 def reporte_servicios(
+    periodo: str | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    return report_service.generar_reporte_servicios(db, actor=current_user)
+    desde, hasta = report_service.resolve_periodo(periodo, desde, hasta)
+    return report_service.generar_reporte_servicios(db, actor=current_user, desde=desde, hasta=hasta)
 
 
 @router.get("/mantenimiento-pendiente")
@@ -92,3 +101,32 @@ def reporte_mantenimiento_pendiente(
         db, actor=current_user, dias_anticipacion=dias_anticipacion
     )
     return {"cantidad": len(alertas), "alertas": alertas}
+
+
+@router.get("/comparar")
+def comparar_periodos(
+    tipo: str = "gastos",
+    periodo: str | None = "mes",
+    desde: date | None = None,
+    hasta: date | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    with domain_errors_as_http():
+        return analytics_service.comparar_periodos(
+            db, actor=current_user, tipo=tipo, periodo=periodo, desde=desde, hasta=hasta
+        )
+
+
+@router.get("/resumen-ejecutivo")
+def resumen_ejecutivo(
+    periodo: str | None = "mes",
+    desde: date | None = None,
+    hasta: date | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    with domain_errors_as_http():
+        return analytics_service.generar_resumen_ejecutivo(
+            db, actor=current_user, periodo=periodo, desde=desde, hasta=hasta
+        )

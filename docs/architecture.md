@@ -133,7 +133,8 @@ backend/app/
 | Grúas (`crane_contracts`, `crane_usage`) | **Real** (Fase 4): registro de horas usadas por WhatsApp, consulta de horas contratadas/disponibles, alerta al 85% de uso. Crear un contrato es una acción administrativa (endpoint REST), no una tool de IA. |
 | Vehículos (ficha) | **Real** (Fase 4): tabla `vehicles`, ficha consultable por WhatsApp y panel web. |
 | GPS | **Solo interfaz abstracta** (`integrations/gps`), sin cambios desde la Fase 1: sigue sin conocerse el proveedor que usa la empresa. Las tools de GPS (`consultar_ubicacion_vehiculo`, etc.) existen y resuelven el vehículo, pero siempre responden "GPS aún no está configurado" hasta que se implemente un `GpsProvider` concreto — nunca se simula una ubicación falsa. |
-| Panel web | **Real**: login, dashboard, usuarios, gastos, tareas, servicios técnicos, clientes, máquinas, vehículos y contratos de grúa, consumiendo la API REST real. |
+| Panel web | **Real**: login, dashboard, usuarios, gastos, tareas, servicios técnicos, clientes, máquinas, vehículos, contratos de grúa y resumen ejecutivo, consumiendo la API REST real. |
+| Comparativas de período y resumen ejecutivo | **Real** (Fase 5), `analytics_service.py`. No es una integración externa: agrega los mismos reportes de gastos/tareas/servicios/mantenimiento/grúas ya reales, comparando contra el período anterior de igual duración. `generar_resumen_ejecutivo` exige `REPORTS_VIEW_ALL` sin excepción (no existe una versión "propia" con sentido). |
 
 Ninguna integración externa de este proyecto se probó de punta a punta contra la cuenta real
 de la empresa (WhatsApp Business, Anthropic, OpenAI, Google Workspace, AWS) — todas requieren
@@ -199,6 +200,13 @@ en silencio o simular una respuesta.
     sin confirmación explícita), pero una vez confirmado, el envío es real e irreversible —
     no hay "deshacer" un correo ya enviado por Gmail. Cualquier ampliación futura de esta
     tool debe mantener esa confirmación obligatoria.
+12. **Costo de N consultas en el resumen ejecutivo**: `generar_resumen_ejecutivo` ejecuta
+    varios reportes agregados en secuencia (gastos actual/anterior, tareas, servicios,
+    mantenimiento, grúas). Con el volumen de datos de una empresa mediana esto es rápido, pero
+    si el histórico de `expenses`/`service_orders` crece mucho, cada reporte itera todos los
+    registros del período en Python (mismo patrón que `report_service` desde la Fase 1) — no
+    hay agregación a nivel de SQL todavía. Optimizar solo si se vuelve un problema real
+    (medir antes de optimizar).
 
 ## 9. Plan de fases (resumen)
 
@@ -215,5 +223,9 @@ en silencio o simular una respuesta.
   comprobantes (S3). GPS queda con la misma interfaz abstracta de la Fase 1 — sigue sin
   implementarse un proveedor concreto porque no se conoce cuál usa la empresa. Recordatorios
   proactivos de mantenimiento vía plantillas de WhatsApp: no implementado (ver riesgo 9).
-- **Fase 5**: inteligencia empresarial (consultas analíticas agregadas, comparativas
-  mensuales, resúmenes ejecutivos) — siempre basada en datos reales y trazable a registros.
+- **Fase 5 (implementada en este commit)**: inteligencia empresarial — comparativas de
+  período contra período anterior (`comparar_periodo`) y resumen ejecutivo cruzando gastos,
+  tareas, servicios, mantenimiento y grúas (`generar_resumen_ejecutivo`). No agrega ninguna
+  integración externa nueva ni ninguna tabla: es una capa de agregación sobre los mismos
+  `report_service`/`maintenance_service`/`crane_service` ya existentes, siempre trazable a
+  IDs de registros reales (`registros_usados`), nunca una cifra inventada por el LLM.

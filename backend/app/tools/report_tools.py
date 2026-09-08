@@ -20,10 +20,11 @@ class GenerarReporteInput(BaseModel):
 
 
 def generar_reporte(db: Session, actor: User, data: GenerarReporteInput) -> dict:
-    if data.tipo == "tareas":
-        return report_service.generar_reporte_tareas(db, actor=actor)
-    if data.tipo == "servicios":
-        return report_service.generar_reporte_servicios(db, actor=actor)
-
     desde, hasta = report_service.resolve_periodo(data.periodo, data.desde, data.hasta)
+
+    if data.tipo == "tareas":
+        return report_service.generar_reporte_tareas(db, actor=actor, desde=desde, hasta=hasta)
+    if data.tipo == "servicios":
+        return report_service.generar_reporte_servicios(db, actor=actor, desde=desde, hasta=hasta)
+
     return report_service.generar_reporte_gastos(db, actor=actor, desde=desde, hasta=hasta)

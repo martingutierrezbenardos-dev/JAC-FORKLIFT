@@ -35,6 +35,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/machines">Máquinas</Link>
           <Link href="/vehicles">Vehículos</Link>
           <Link href="/cranes">Grúas</Link>
+          <Link href="/resumen-ejecutivo">Resumen ejecutivo</Link>
           <Link href="/users">Usuarios</Link>
           <a
             href="#"
