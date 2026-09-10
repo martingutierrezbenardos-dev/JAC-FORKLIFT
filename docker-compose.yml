@@ -7,7 +7,10 @@ services:
       POSTGRES_PASSWORD: jacobea
       POSTGRES_DB: jacobea_dev
     ports:
-      - "5432:5432"
+      # Puerto expuesto hacia el host en 5433 (no 5432) para no chocar con un PostgreSQL local
+      # ya instalado en la máquina. Esto NO afecta la conexión interna entre contenedores
+      # (backend se conecta a "db:5432" dentro de la red de Docker, no a este puerto).
+      - "5433:5432"
     volumes:
       - jacobea_db_data:/var/lib/postgresql/data
     healthcheck:
