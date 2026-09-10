@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.client import AnthropicLLMClient, LLMClient
-from app.ai.prompts import SYSTEM_PROMPT
+from app.ai.prompts import build_system_prompt
 from app.core.config import get_settings
 from app.core.errors import DomainError
 from app.core.permissions import has_permission
@@ -142,7 +142,7 @@ class AgentSession:
                 "Confírmale brevemente que se realizó, en español, tono asistente interno de Jacobea."
             )
         response = self._llm.create_message(
-            system=SYSTEM_PROMPT, messages=[{"role": "user", "content": prompt}], tools=[]
+            system=build_system_prompt(), messages=[{"role": "user", "content": prompt}], tools=[]
         )
         return response.text or "Listo, hice lo que confirmaste."
 
@@ -162,11 +162,12 @@ class AgentSession:
 
         working_messages = self._load_history(db, user)
         tools_schema = llm_schemas_for_role(user.rol)
+        system_prompt = build_system_prompt()
 
         final_text: str | None = None
 
         for _ in range(self._settings.max_tool_iterations):
-            response = self._llm.create_message(system=SYSTEM_PROMPT, messages=working_messages, tools=tools_schema)
+            response = self._llm.create_message(system=system_prompt, messages=working_messages, tools=tools_schema)
 
             if not response.wants_tool_call:
                 final_text = response.text or "Listo."

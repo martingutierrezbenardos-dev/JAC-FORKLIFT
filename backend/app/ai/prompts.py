@@ -6,6 +6,8 @@ app/ai/agent.py), no por instrucciones de prompt.
 """
 from __future__ import annotations
 
+from datetime import date
+
 SYSTEM_PROMPT = """\
 Eres el asistente interno de Jacobea Forklift Chile, disponible por WhatsApp para técnicos,
 vendedores, administración y gerencia. Tu trabajo es transformar mensajes en lenguaje natural
@@ -34,3 +36,25 @@ Reglas de comportamiento:
 - No tienes acceso a información fuera de lo que las herramientas te entregan. No asumas
   datos de comprobantes, boletas o documentos que no se te hayan entregado explícitamente.
 """
+
+_DIAS_ES = {0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves", 4: "viernes", 5: "sábado", 6: "domingo"}
+
+
+def build_system_prompt(*, today: date | None = None) -> str:
+    """Arma el system prompt inyectando la fecha de hoy explícitamente.
+
+    El modelo no tiene reloj propio: sin esto, al resolver expresiones relativas como "hoy",
+    "ayer" o "mañana" el LLM adivina una fecha a partir de su conocimiento de entrenamiento en
+    vez de usar la fecha real — exactamente el tipo de dato inventado que el brief prohíbe
+    (sección 23). Se usa ``date.today()``, la misma función que ya usan los servicios
+    (``report_service``, ``maintenance_service``, etc.), para que la fecha que el modelo "ve"
+    sea siempre la misma que usará el código al ejecutar la tool.
+    """
+    hoy = today or date.today()
+    dia_semana = _DIAS_ES[hoy.weekday()]
+    return (
+        f"{SYSTEM_PROMPT}\n"
+        f'Hoy es {dia_semana} {hoy.isoformat()} (formato AAAA-MM-DD). Usa esta fecha para '
+        'resolver expresiones relativas como "hoy", "ayer", "mañana" o "esta semana" al llamar '
+        "una herramienta — nunca inventes ni asumas otra fecha."
+    )
