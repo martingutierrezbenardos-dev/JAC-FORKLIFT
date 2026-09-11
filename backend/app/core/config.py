@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +23,24 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+psycopg://jacobea:jacobea@localhost:5432/jacobea_dev"
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalizar_driver_postgres(cls, v: str) -> str:
+        """Fuerza el driver psycopg (v3), que es el que instala requirements.txt.
+
+        Proveedores como Railway/Render/Heroku generan DATABASE_URL con el esquema genérico
+        `postgres://` o `postgresql://` (sin especificar driver). SQLAlchemy, sin un driver
+        explícito, intenta usar psycopg2 por defecto — que no está instalado en este proyecto
+        — y falla con "ModuleNotFoundError: No module named 'psycopg2'". Se reescribe el
+        esquema aquí, en el único lugar que lee esta variable, para que funcione sin importar
+        el formato exacto que entregue el proveedor de hosting.
+        """
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+psycopg://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        return v
 
     # Autenticación panel web
     jwt_secret_key: str = Field(default="CHANGE_ME_INSECURE_DEV_ONLY")
