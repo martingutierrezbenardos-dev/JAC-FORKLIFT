@@ -190,6 +190,8 @@ def _compose_receipt_message(caption: str, extracted: ExtractedReceipt, comproba
 
 def _safe_reply(whatsapp_client: WhatsAppClient, to_phone: str, body: str) -> None:
     try:
-        whatsapp_client.send_text(to_phone, body)
+        result = whatsapp_client.send_text(to_phone, body)
     except Exception:  # noqa: BLE001
         logger.exception("No se pudo enviar respuesta de WhatsApp a %s", to_phone)
+    else:
+        logger.info("Respuesta de WhatsApp enviada a %s: %s", to_phone, result)
